@@ -1,0 +1,97 @@
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+from gva.models.storyboard import CaptionCue, Storyboard
+
+
+KEYWORD_RE = re.compile(r"(RAG|FAISS|DeepSeek|GitHub|README|API|FastAPI|LangGraph|Remotion|Python|TypeScript)", re.IGNORECASE)
+
+
+def attach_caption_cues(storyboard: Storyboard, output_dir: Path) -> Storyboard:
+    enhanced = storyboard.model_copy(deep=True)
+    manifest: dict[str, list[dict]] = {"scenes": []}
+    for scene in enhanced.scenes:
+        cues = _scene_cues(scene_id=scene.id, narration=scene.narration, duration=scene.duration)
+        scene.captions = cues
+        manifest["scenes"].append(
+            {
+                "scene_id": scene.id,
+                "duration": scene.duration,
+                "cue_count": len(cues),
+                "cues": [cue.model_dump() for cue in cues],
+            }
+        )
+
+    logs_dir = output_dir / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    (logs_dir / "caption-cues.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return enhanced
+
+
+def _scene_cues(scene_id: str, narration: str, duration: float) -> list[CaptionCue]:
+    parts = _split_narration(narration)
+    if not parts:
+        return []
+    total_weight = sum(max(len(part), 6) for part in parts)
+    cursor = 0.0
+    cues: list[CaptionCue] = []
+    for index, part in enumerate(parts):
+        if index == len(parts) - 1:
+            end = duration
+        else:
+            weight = max(len(part), 6) / total_weight
+            end = min(duration, cursor + max(0.8, duration * weight))
+        cues.append(
+            CaptionCue(
+                start=round(cursor, 2),
+                end=round(max(end, cursor + 0.6), 2),
+                text=part,
+                keywords=_keywords(part),
+                source_scene_id=scene_id,
+            )
+        )
+        cursor = cues[-1].end
+        if cursor >= duration:
+            break
+    if cues:
+        cues[-1].end = round(duration, 2)
+    return cues
+
+
+def _split_narration(text: str) -> list[str]:
+    text = re.sub(r"\s+", "", text.strip())
+    if not text:
+        return []
+    rough = [part for part in re.split(r"(?<=[。！？!?；;])", text) if part]
+    parts: list[str] = []
+    for item in rough:
+        if len(item) <= 26:
+            parts.append(item)
+            continue
+        chunks = [chunk for chunk in re.split(r"(?<=[，,、])", item) if chunk]
+        current = ""
+        for chunk in chunks:
+            if len(current) + len(chunk) <= 24:
+                current += chunk
+            else:
+                if current:
+                    parts.append(current)
+                current = chunk
+        if current:
+            parts.append(current)
+    return [part[:34] for part in parts[:5]]
+
+
+def _keywords(text: str) -> list[str]:
+    found = []
+    for match in KEYWORD_RE.finditer(text):
+        value = match.group(0)
+        canonical = "GitHub" if value.lower() == "github" else value
+        found.append(canonical)
+    return list(dict.fromkeys(found))

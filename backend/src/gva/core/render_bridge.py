@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+from gva.config import Settings
+from gva.models.storyboard import Storyboard
+
+
+def prepare_remotion_public_assets(
+    output_dir: Path,
+    renderer_dir: Path,
+    storyboard: Storyboard,
+    audio_path: Path,
+) -> tuple[Path, Path]:
+    public_dir = renderer_dir / "public" / "generated"
+    public_dir.mkdir(parents=True, exist_ok=True)
+
+    storyboard_public_path = public_dir / "storyboard.json"
+    audio_public_path = public_dir / "voice.mp3"
+
+    storyboard_public_path.write_text(
+        storyboard.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+    shutil.copyfile(audio_path, audio_public_path)
+
+    manifest_path = output_dir / "logs" / "render-input.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "storyboard_public_path": str(storyboard_public_path),
+                "audio_public_path": str(audio_public_path),
+                "scene_count": len(storyboard.scenes),
+                "duration_seconds": round(sum(scene.duration for scene in storyboard.scenes), 2),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return storyboard_public_path, audio_public_path
+
+
+def install_renderer_dependencies(settings: Settings) -> None:
+    renderer_dir = settings.renderer_dir.resolve()
+    node_modules = renderer_dir / "node_modules"
+    if node_modules.exists():
+        return
+    npm = _require_path(settings.npm_cmd, "NPM_CMD")
+    subprocess.run([str(npm), "install"], cwd=renderer_dir, check=True)
+
+
+def render_video(output_dir: Path, settings: Settings) -> Path:
+    renderer_dir = settings.renderer_dir.resolve()
+    node = _require_path(settings.node_exe, "NODE_EXE")
+    ffmpeg = _require_path(settings.ffmpeg_exe, "FFMPEG_EXE")
+    chrome = _optional_existing_path(settings.chrome_exe)
+    remotion_cli = renderer_dir / "node_modules" / "@remotion" / "cli" / "remotion-cli.js"
+    if not remotion_cli.exists():
+        raise FileNotFoundError(f"Remotion CLI does not exist: {remotion_cli}")
+    timed_storyboard_path = output_dir / "storyboard-timed.json"
+    if not timed_storyboard_path.exists():
+        raise FileNotFoundError(f"Timed storyboard does not exist: {timed_storyboard_path}")
+    storyboard = Storyboard.model_validate_json(timed_storyboard_path.read_text(encoding="utf-8"))
+    video_path = output_dir / "videos" / "video.mp4"
+    video_path.parent.mkdir(parents=True, exist_ok=True)
+    full_env = os.environ.copy()
+    full_env["REMOTION_FFMPEG_BINARY"] = str(ffmpeg)
+    full_env["PATH"] = f"{ffmpeg.parent};{node.parent};{full_env.get('PATH', '')}"
+    command = [
+        str(node),
+        str(remotion_cli),
+        "render",
+        "src/render-entry.tsx",
+        "VerticalProjectVideo",
+        str(video_path),
+        "--props",
+        json.dumps(
+            {
+                "storyboard": storyboard.model_dump(mode="json"),
+                "audioSrc": "generated/voice.mp3",
+            },
+            ensure_ascii=False,
+        ),
+    ]
+    if chrome:
+        command.extend(["--browser-executable", str(chrome)])
+
+    subprocess.run(
+        command,
+        cwd=renderer_dir,
+        check=True,
+        env=full_env,
+    )
+    return video_path
+
+
+def _require_path(path: Path | None, name: str) -> Path:
+    if path is None:
+        raise ValueError(f"{name} is not configured.")
+    resolved = path.resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(f"{name} does not exist: {resolved}")
+    return resolved
+
+
+def _optional_existing_path(path: Path | None) -> Path | None:
+    if path is None:
+        return None
+    resolved = path.resolve()
+    return resolved if resolved.exists() else None
+

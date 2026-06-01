@@ -1,0 +1,27 @@
+{
+  "title": "示例项目讲解",
+  "aspect_ratio": "9:16",
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "scenes": [
+    {
+      "id": "scene-001",
+      "type": "title",
+      "start": 0,
+      "duration": 6,
+      "narration": "这是一个示例项目讲解视频。",
+      "visual": {
+        "layout": "title",
+        "headline": "GitHub Video Agent",
+        "bullets": ["把代码仓库变成中文竖屏讲解视频"],
+        "code": null,
+        "diagram_nodes": [],
+        "icons": ["sparkles"],
+        "accent_color": "#111827",
+        "animation": "rise"
+      },
+      "evidence_keys": []
+    }
+  ]
+}
