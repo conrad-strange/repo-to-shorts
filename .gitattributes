@@ -20,6 +20,7 @@
 *.env.example text eol=lf
 .gitignore text eol=lf
 .gitattributes text eol=lf
+.gitkeep text eol=lf
 requirements.txt text eol=lf
 package-lock.json text eol=lf
 

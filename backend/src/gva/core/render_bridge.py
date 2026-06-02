@@ -58,14 +58,14 @@ def install_renderer_dependencies(settings: Settings) -> None:
     node_modules = renderer_dir / "node_modules"
     if node_modules.exists():
         return
-    npm = _require_path(settings.npm_cmd, "NPM_CMD")
+    npm = find_npm(settings)
     subprocess.run([str(npm), "install"], cwd=renderer_dir, check=True)
 
 
 def render_video(output_dir: Path, settings: Settings) -> Path:
     renderer_dir = settings.renderer_dir.resolve()
-    node = _require_path(settings.node_exe, "NODE_EXE")
-    ffmpeg = _require_path(settings.ffmpeg_exe, "FFMPEG_EXE")
+    node = find_node(settings)
+    ffmpeg = find_ffmpeg(settings)
     chrome = _optional_existing_path(settings.chrome_exe)
     remotion_cli = renderer_dir / "node_modules" / "@remotion" / "cli" / "remotion-cli.js"
     if not remotion_cli.exists():
@@ -111,6 +111,18 @@ def render_video(output_dir: Path, settings: Settings) -> Path:
     return video_path
 
 
+def find_node(settings: Settings) -> Path:
+    return _find_tool(settings.node_exe, "NODE_EXE", "node-*-win-x64/node.exe", ["node.exe", "node"])
+
+
+def find_npm(settings: Settings) -> Path:
+    return _find_tool(settings.npm_cmd, "NPM_CMD", "node-*-win-x64/npm.cmd", ["npm.cmd", "npm"])
+
+
+def find_ffmpeg(settings: Settings) -> Path:
+    return _find_tool(settings.ffmpeg_exe, "FFMPEG_EXE", "**/ffmpeg.exe", ["ffmpeg.exe", "ffmpeg"])
+
+
 def _storyboard_for_render(storyboard: Storyboard, render_profile: str) -> Storyboard:
     """Backward-compatible helper: preview scaling is handled by Remotion --scale."""
     return storyboard.model_copy(deep=True)
@@ -126,13 +138,23 @@ def _render_scale_for_profile(render_profile: str) -> float:
     return 1
 
 
-def _require_path(path: Path | None, name: str) -> Path:
-    if path is None:
-        raise ValueError(f"{name} is not configured.")
-    resolved = path.resolve()
-    if not resolved.exists():
-        raise FileNotFoundError(f"{name} does not exist: {resolved}")
-    return resolved
+def _find_tool(configured: Path | None, name: str, tools_glob: str, path_names: list[str]) -> Path:
+    candidates: list[Path] = []
+    if configured:
+        candidates.append(configured)
+    candidates.extend(sorted(Path(".tools").glob(tools_glob), reverse=True))
+    for executable in path_names:
+        found = shutil.which(executable)
+        if found:
+            candidates.append(Path(found))
+
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved.exists() and resolved.is_file():
+            return resolved
+    raise FileNotFoundError(
+        f"{name} was not found. Set it in .env, run scripts/install-portable-tools.ps1, or install it on PATH."
+    )
 
 
 def _optional_existing_path(path: Path | None) -> Path | None:

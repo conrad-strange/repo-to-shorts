@@ -29,7 +29,9 @@ build/
 # Local tools and agent state
 .cache/
 .remotion/
-.tools/
+.tools/*
+!.tools/
+!.tools/.gitkeep
 .codex/
 *.log
 

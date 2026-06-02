@@ -1,11 +1,16 @@
 from pathlib import Path
+import re
+import subprocess
+import sys
 from typing import Optional
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 from gva.config import Settings
 from gva.agents.evaluator import evaluate_output
+from gva.core.render_bridge import find_ffmpeg, find_node, find_npm
 from gva.core.runs import clean_old_runs, list_run_ids, resolve_run_dir
 from gva.workflow import run_render_workflow
 
@@ -147,6 +152,60 @@ def clean_command(
         console.print(str(path))
 
 
+@app.command("doctor")
+def doctor_command() -> None:
+    """Check local dependencies needed by the web UI and renderer."""
+    settings = Settings()
+    checks: list[tuple[str, bool, str, str, bool]] = []
+
+    checks.append(("Python", sys.version_info >= (3, 11), sys.version.split()[0], "Use Python 3.11+.", True))
+    checks.append((".env", Path(".env").exists(), ".env found", "Run: copy .env.example .env", True))
+
+    provider = (settings.llm_provider or "deepseek").lower()
+    if provider == "deepseek":
+        key_ok = bool(settings.deepseek_api_key)
+        checks.append(("DeepSeek API key", key_ok, "Configured", "Set DEEPSEEK_API_KEY in .env.", True))
+    else:
+        checks.append(("LLM provider", True, provider, "Only DeepSeek is the tested default.", False))
+
+    node_path, node_detail = _tool_detail(lambda: find_node(settings), ["-v"])
+    node_ok = bool(node_path) and _node_version_ok(node_detail)
+    checks.append(("Node.js", node_ok, node_detail, "Install Node.js 20.19+ or run scripts/install-portable-tools.ps1.", True))
+
+    npm_path, npm_detail = _tool_detail(lambda: find_npm(settings), ["-v"])
+    checks.append(("npm", bool(npm_path), npm_detail, "Install Node.js/npm or run scripts/install-portable-tools.ps1.", True))
+
+    ffmpeg_path, ffmpeg_detail = _tool_detail(lambda: find_ffmpeg(settings), ["-version"], first_line=True)
+    checks.append(("FFmpeg", bool(ffmpeg_path), ffmpeg_detail, "Install FFmpeg or run scripts/install-portable-tools.ps1.", True))
+
+    chrome = settings.chrome_exe.resolve() if settings.chrome_exe else None
+    chrome_ok = bool(chrome and chrome.exists())
+    checks.append(("Chrome", chrome_ok, "Configured" if chrome_ok else "Optional", "Optional. Used for GitHub screenshots.", False))
+
+    frontend_dir = settings.frontend_dir.resolve()
+    renderer_dir = settings.renderer_dir.resolve()
+    checks.append(("Frontend package", (frontend_dir / "package.json").exists(), str(frontend_dir), "Missing frontend/package.json.", True))
+    checks.append(("Frontend build", (frontend_dir / "dist" / "index.html").exists(), "dist/index.html found", "gva ui builds it automatically.", False))
+    checks.append(("Renderer package", (renderer_dir / "package.json").exists(), str(renderer_dir), "Missing renderer/package.json.", True))
+    checks.append(("Renderer deps", (renderer_dir / "node_modules").exists(), "node_modules found", "Renderer deps install automatically before render.", False))
+
+    table = Table(title="Repo to Shorts Doctor")
+    table.add_column("Check", style="bold")
+    table.add_column("Status")
+    table.add_column("Detail")
+    table.add_column("Hint")
+
+    failed_required = False
+    for name, ok, detail, hint, required in checks:
+        status = "[green]OK[/green]" if ok else ("[red]Missing[/red]" if required else "[yellow]Optional[/yellow]")
+        table.add_row(name, status, detail, "" if ok else hint)
+        failed_required = failed_required or (required and not ok)
+
+    console.print(table)
+    if failed_required:
+        raise typer.Exit(1)
+
+
 @app.command("ui")
 def ui_command(
     host: str = typer.Option("127.0.0.1", "--host", help="Local host for the web UI."),
@@ -167,6 +226,41 @@ def ui_command(
 
     console.print(f"[green]Starting Repo to Shorts UI on http://{host}:{port}[/green]")
     run_web_ui(host=host, port=port, rebuild_frontend=rebuild_frontend, open_browser=open_browser)
+
+
+def _tool_detail(
+    resolver,
+    version_args: list[str],
+    first_line: bool = False,
+) -> tuple[Path | None, str]:
+    try:
+        path = resolver()
+    except Exception as exc:
+        return None, str(exc)
+    try:
+        completed = subprocess.run(
+            [str(path), *version_args],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            timeout=8,
+        )
+    except Exception as exc:
+        return path, f"{path} ({exc.__class__.__name__})"
+    output = (completed.stdout or completed.stderr or "").strip()
+    if first_line and output:
+        output = output.splitlines()[0]
+    return path, output or f"{path.name} found"
+
+
+def _node_version_ok(detail: str) -> bool:
+    match = re.search(r"v?(\d+)\.(\d+)\.(\d+)", detail)
+    if not match:
+        return False
+    major, minor, _patch = (int(part) for part in match.groups())
+    return major > 22 or (major == 22 and minor >= 12) or (major == 20 and minor >= 19)
 
 
 if __name__ == "__main__":

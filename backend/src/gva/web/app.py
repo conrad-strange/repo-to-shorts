@@ -766,12 +766,16 @@ def _find_npm(settings: Settings) -> Path:
     if settings.npm_cmd:
         candidates.append(settings.npm_cmd)
     candidates.extend(sorted(Path(".tools").glob("node-*-win-x64/npm.cmd"), reverse=True))
+    for executable in ["npm.cmd", "npm"]:
+        found = shutil.which(executable)
+        if found:
+            candidates.append(Path(found))
     for candidate in candidates:
         resolved = candidate.resolve()
-        if resolved.exists():
+        if resolved.exists() and resolved.is_file():
             return resolved
     raise FileNotFoundError(
-        "NPM is not configured. Set NPM_CMD or install the project portable Node under .tools/."
+        "NPM was not found. Set NPM_CMD, run scripts/install-portable-tools.ps1, or install Node.js on PATH."
     )
 
 

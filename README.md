@@ -72,7 +72,38 @@ pip install -e backend
 
 ### 2. Node / Remotion
 
-Vite 需要 Node.js 20.19+ 或 22.12+。如果系统 Node 版本较低，可以在 `.env` 中配置 `NODE_EXE` / `NPM_CMD` 指向本地或项目内的 Node。
+Vite 需要 Node.js 20.19+ 或 22.12+。FFmpeg 用于音频标准化、预览帧和最终视频检查。
+
+推荐二选一：
+
+**路线 A：使用项目内 portable tools（Windows 推荐）**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-portable-tools.ps1
+```
+
+脚本会下载 Node.js 和 FFmpeg 到 `.tools/`，并自动写入 `.env`：
+
+```text
+NODE_EXE=...
+NPM_CMD=...
+FFMPEG_EXE=...
+```
+
+`.tools/` 只提交 `.gitkeep`，实际下载内容不会上传到 GitHub。
+如果 `.env` 不存在，脚本会先从 `.env.example` 创建；如果已经存在，只更新工具路径。
+
+**路线 B：使用系统已安装的 Node / FFmpeg**
+
+```powershell
+node -v
+npm -v
+ffmpeg -version
+```
+
+如果它们都在 PATH 里，程序会自动发现；也可以手动在 `.env` 中填写 `NODE_EXE` / `NPM_CMD` / `FFMPEG_EXE`。
+
+安装前端和渲染依赖：
 
 ```powershell
 cd renderer
@@ -88,7 +119,7 @@ cd ..
 ### 3. Environment
 
 ```powershell
-copy .env.example .env
+if (-not (Test-Path .env)) { copy .env.example .env }
 ```
 
 至少填写：
@@ -105,6 +136,14 @@ CHROME_EXE=C:\Program Files\Google\Chrome\Application\chrome.exe
 ```
 
 Edge TTS 默认不需要 API key。
+
+### 4. Check Environment
+
+```powershell
+gva doctor
+```
+
+`doctor` 会检查 Python、`.env`、DeepSeek key、Node.js、npm、FFmpeg、Chrome、frontend build 和 renderer 依赖状态。
 
 ## Usage
 
