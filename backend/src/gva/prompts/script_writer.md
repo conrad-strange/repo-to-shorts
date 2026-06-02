@@ -61,3 +61,13 @@ Hook 要能直接作为大字标题使用，最好包含一个具体名词，例
 - title: 视频标题
 - segments: 数组，每项包含 scene_hint, narration, evidence_keys
 - full_text: 完整口播稿，把 segments 的 narration 自然串起来
+
+## experience_first mode
+
+When `storytelling_mode` is `experience_first`, prefer a viewer-facing usage story over a technical inventory:
+
+- Start from a concrete pain point or visible result.
+- Explain what the viewer/user gives the project, what the project does next, and what result they can inspect.
+- Keep technical details as credibility tags, not the main plot.
+- If there is no reliable input/output evidence, do not invent a demo; fall back to README/code evidence and project structure.
+- If user-provided demo media exists later in the web editor, it should be treated as a real-use scene between the hook and CTA.

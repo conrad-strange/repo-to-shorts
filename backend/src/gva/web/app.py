@@ -12,7 +12,7 @@ import webbrowser
 from pathlib import Path
 from typing import Any, Callable, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -23,6 +23,7 @@ from git.exc import GitCommandError
 from pydantic import BaseModel, Field
 
 from gva.config import Settings
+from gva.core.render_bridge import find_ffmpeg
 from gva.core.runs import allocate_run, list_run_ids, resolve_run_dir
 from gva.core.tts import _synthesize_edge_tts
 from gva.models.storyboard import Storyboard
@@ -39,6 +40,7 @@ class WorkflowRequest(BaseModel):
     output_name: str | None = None
     out_dir: str | None = None
     video_mode: VideoMode = "short_30s"
+    storytelling_mode: str = "experience_first"
     render_strategy: str = "remotion-primary"
     render_profile: RenderProfile = "preview"
     brand_mode: BrandMode = "rs"
@@ -287,6 +289,19 @@ def create_app(frontend_dist: Path | None = None) -> FastAPI:
         run_dir = _run_dir(project_id, run_id)
         return _save_user_image_asset(run_dir, request)
 
+    @app.post("/api/projects/{project_id}/runs/{run_id}/assets/user-video")
+    async def upload_user_video(
+        project_id: str,
+        run_id: str,
+        request: Request,
+        filename: str = "demo.mp4",
+        start: float = 0.0,
+        end: float = 6.0,
+        clips: str | None = None,
+    ) -> dict[str, Any]:
+        run_dir = _run_dir(project_id, run_id)
+        return await _save_user_video_asset(run_dir, request, filename, start, end, clips)
+
     @app.post("/api/projects/{project_id}/runs/{run_id}/rerender")
     def rerender(project_id: str, run_id: str, request: RerenderRequest) -> dict[str, Any]:
         return _rerender_payload(project_id, run_id, request)
@@ -315,6 +330,7 @@ def _validate_workflow_request(request: WorkflowRequest) -> None:
 def _settings_from_request(request: WorkflowRequest) -> Settings:
     settings = Settings()
     settings.video_mode = request.video_mode
+    settings.storytelling_mode = request.storytelling_mode or settings.storytelling_mode
     settings.render_strategy = request.render_strategy
     settings.render_profile = request.render_profile
     settings.brand_mode = request.brand_mode
@@ -367,6 +383,7 @@ def _rerender_payload(
     settings = Settings()
     settings.video_mode = metadata.get("video_mode", settings.video_mode)
     settings.render_strategy = metadata.get("render_strategy", settings.render_strategy)
+    settings.storytelling_mode = metadata.get("storytelling_mode", settings.storytelling_mode)
     settings.render_profile = request.render_profile or metadata.get("render_profile", "preview")
     settings.brand_mode = request.brand_mode or metadata.get("brand_mode", settings.brand_mode)
     settings.bomb_circle = request.bomb_circle or metadata.get("bomb_circle", settings.bomb_circle)
@@ -472,6 +489,180 @@ def _save_user_image_asset(run_dir: Path, request: UserImageAssetRequest) -> dic
         "run_asset_path": str(target),
         "bytes": target.stat().st_size,
     }
+
+
+async def _save_user_video_asset(
+    run_dir: Path,
+    request: Request,
+    filename: str,
+    start: float,
+    end: float,
+    clips: str | None = None,
+) -> dict[str, Any]:
+    clip_ranges = _parse_user_video_clips(clips, start, end)
+    start = clip_ranges[0]["start"]
+    end = clip_ranges[0]["end"]
+    if start < 0:
+        raise HTTPException(status_code=400, detail="视频开始时间不能小于 0 秒。")
+    if end <= start:
+        raise HTTPException(status_code=400, detail="视频结束时间必须大于开始时间。")
+    duration = round(end - start, 3)
+    if duration < 2:
+        raise HTTPException(status_code=400, detail="展示片段至少保留 2 秒。")
+    if duration > 12:
+        raise HTTPException(status_code=400, detail="初版视频素材片段请控制在 12 秒以内。")
+
+    payload = await request.body()
+    if not payload:
+        raise HTTPException(status_code=400, detail="请先选择一个视频文件。")
+    if len(payload) > 120 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="视频文件太大，请上传 120MB 以内的录屏。")
+
+    suffix = _safe_video_suffix(filename)
+    digest = hashlib.sha1(payload).hexdigest()[:16]
+    output_dir = run_dir / "assets" / "user"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    source = output_dir / f"source-{digest}{suffix}"
+    target = output_dir / f"result-video-{digest}.mp4"
+    source.write_bytes(payload)
+    if len(clip_ranges) == 1:
+        _clip_user_video(source, target, start, duration)
+    else:
+        parts = []
+        for index, clip in enumerate(clip_ranges, start=1):
+            part = output_dir / f"result-video-{digest}-part-{index:02d}.mp4"
+            _clip_user_video(source, part, clip["start"], clip["duration"])
+            parts.append(part)
+        _concat_user_video_parts(parts, target, output_dir / f"result-video-{digest}-concat.txt")
+
+    public_target = Settings().renderer_dir.resolve() / "public" / "generated" / "assets" / "user" / target.name
+    public_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(target, public_target)
+    return {
+        "asset_path": f"generated/assets/user/{target.name}",
+        "run_asset_path": str(target),
+        "bytes": target.stat().st_size,
+        "start": clip_ranges[0]["start"],
+        "end": clip_ranges[-1]["end"],
+        "duration": round(sum(clip["duration"] for clip in clip_ranges), 3),
+        "clips": clip_ranges,
+    }
+
+
+def _parse_user_video_clips(clips: str | None, start: float, end: float) -> list[dict[str, float]]:
+    if clips:
+        try:
+            parsed = json.loads(clips)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="视频片段参数无法解析。") from exc
+        if not isinstance(parsed, list):
+            raise HTTPException(status_code=400, detail="视频片段参数必须是数组。")
+        raw_clips = [item for item in parsed if isinstance(item, dict)]
+    else:
+        raw_clips = [{"start": start, "end": end}]
+
+    if not raw_clips:
+        raise HTTPException(status_code=400, detail="请至少选择一个视频片段。")
+    if len(raw_clips) > 6:
+        raise HTTPException(status_code=400, detail="初版最多拼接 6 个视频片段。")
+
+    normalized = []
+    for item in raw_clips:
+        clip_start = _safe_float(item.get("start"))
+        clip_end = _safe_float(item.get("end"))
+        if clip_start < 0:
+            raise HTTPException(status_code=400, detail="视频开始时间不能小于 0 秒。")
+        if clip_end <= clip_start:
+            raise HTTPException(status_code=400, detail="视频结束时间必须大于开始时间。")
+        duration = round(clip_end - clip_start, 3)
+        if duration < 2:
+            raise HTTPException(status_code=400, detail="每个展示片段至少保留 2 秒。")
+        if duration > 12:
+            raise HTTPException(status_code=400, detail="每个视频素材片段请控制在 12 秒以内。")
+        normalized.append({"start": round(clip_start, 3), "end": round(clip_end, 3), "duration": duration})
+
+    total = sum(clip["duration"] for clip in normalized)
+    if total > 24:
+        raise HTTPException(status_code=400, detail="多片段拼接总时长请控制在 24 秒以内。")
+    return normalized
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="视频片段时间必须是数字。") from None
+
+
+def _clip_user_video(source: Path, target: Path, start: float, duration: float) -> None:
+    ffmpeg = find_ffmpeg(Settings())
+    command = [
+        str(ffmpeg),
+        "-y",
+        "-ss",
+        f"{start:.3f}",
+        "-i",
+        str(source),
+        "-t",
+        f"{duration:.3f}",
+        "-vf",
+        "scale=960:-2",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "28",
+        "-movflags",
+        "+faststart",
+        str(target),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    if completed.returncode != 0 or not target.exists():
+        message = (completed.stderr or completed.stdout or "").strip().splitlines()[-1:] or ["FFmpeg failed."]
+        raise HTTPException(status_code=502, detail=f"视频片段处理失败：{message[0]}")
+
+
+def _concat_user_video_parts(parts: list[Path], target: Path, list_path: Path) -> None:
+    if not parts:
+        raise HTTPException(status_code=400, detail="没有可拼接的视频片段。")
+    ffmpeg = find_ffmpeg(Settings())
+    list_path.write_text(
+        "\n".join(_concat_file_line(part) for part in parts),
+        encoding="utf-8",
+    )
+    command = [
+        str(ffmpeg),
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(list_path),
+        "-c",
+        "copy",
+        "-movflags",
+        "+faststart",
+        str(target),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    if completed.returncode != 0 or not target.exists():
+        message = (completed.stderr or completed.stdout or "").strip().splitlines()[-1:] or ["FFmpeg concat failed."]
+        raise HTTPException(status_code=502, detail=f"视频片段拼接失败：{message[0]}")
+
+
+def _concat_file_line(path: Path) -> str:
+    escaped = path.resolve().as_posix().replace("'", "'\\''")
+    return f"file '{escaped}'"
+
+
+def _safe_video_suffix(filename: str) -> str:
+    suffix = Path(filename or "").suffix.lower()
+    if suffix in {".mp4", ".mov", ".m4v", ".webm", ".mkv"}:
+        return suffix
+    return ".mp4"
 
 
 def _write_resized_png(payload: bytes, target: Path) -> bool:

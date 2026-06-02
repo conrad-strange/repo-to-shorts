@@ -89,6 +89,7 @@ def run_render_workflow(
         "tts_voice": settings.tts_voice,
         "tts_rate": settings.tts_rate,
         "video_mode": settings.video_mode,
+        "storytelling_mode": settings.storytelling_mode,
         "render_profile": settings.render_profile,
         "brand_mode": settings.brand_mode,
         "bomb_circle": settings.bomb_circle,

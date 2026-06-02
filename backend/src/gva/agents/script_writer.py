@@ -73,6 +73,8 @@ def _build_insight_input(insight: ProjectInsight, settings: Settings) -> str:
         {
             "video_mode": settings.video_mode,
             "mode_notes": _mode_notes(settings.video_mode),
+            "storytelling_mode": settings.storytelling_mode,
+            "storytelling_notes": _storytelling_notes(settings.storytelling_mode),
             "project_insight": insight.model_dump(),
         },
         ensure_ascii=False,
@@ -85,3 +87,13 @@ def _mode_notes(video_mode: str) -> str:
     if video_mode == "technical_90s":
         return "Aim for 75-90 seconds: include architecture, usage, and one concise code or implementation detail scene."
     return "Aim for 45-60 seconds: hook, project value, core flow, highlights, usage/CTA."
+
+
+def _storytelling_notes(storytelling_mode: str) -> str:
+    if storytelling_mode == "experience_first":
+        return (
+            "Prefer a viewer-facing usage story: concrete pain point, what the user gives the project, "
+            "what happens next, what result they get, then a small amount of technical credibility. "
+            "If the repo has no obvious input/output demo, fall back to README/code evidence cards."
+        )
+    return "Use the existing technical repo explainer structure."

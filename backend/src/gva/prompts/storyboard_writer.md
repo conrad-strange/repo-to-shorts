@@ -80,3 +80,13 @@ diagram_nodes 可以写成短标题，也可以写成 “标题：说明”：
 - animation
 - caption
 - micro_beats
+
+## experience_first mode
+
+When `storytelling_mode` is `experience_first`, prefer scenes that show a real viewer-facing experience:
+
+- Hook: concrete pain point or visible result.
+- Early/middle scene: user action, terminal output, screenshot, or demo clip when available.
+- Technical scene: only a small amount of proof, such as stack tags or evidence cards.
+- If no demo media exists, use README/code evidence cards instead of inventing input/output behavior.
+- Never place user demo media as the first or last scene; it should usually appear after scene 2 or scene 3.

@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {type PointerEvent, useEffect, useMemo, useRef, useState} from 'react';
 import {api} from './api';
 import type {BrandMode, JobDetail, JobEvent, ProjectItem, RenderProfile, RunDetail, Scene, Storyboard, VideoMode} from './types';
 
@@ -57,6 +57,11 @@ interface VerificationDetailsSummary {
   total: number;
 }
 
+interface ClipRange {
+  start: number;
+  end: number;
+}
+
 export function App() {
   const [repoUrl, setRepoUrl] = useState('https://github.com/conrad-strange/repo-to-shorts');
   const [repoUrlTouched, setRepoUrlTouched] = useState(false);
@@ -81,14 +86,22 @@ export function App() {
   const [draftStatus, setDraftStatus] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved');
   const [voicePreviewBusy, setVoicePreviewBusy] = useState(false);
   const [addSceneOpen, setAddSceneOpen] = useState(false);
-  const [addSceneKind, setAddSceneKind] = useState<'code' | 'image'>('code');
+  const [addSceneKind, setAddSceneKind] = useState<'code' | 'image' | 'video'>('code');
   const [addSceneTitle, setAddSceneTitle] = useState('代码 / 结果');
   const [addSceneNarration, setAddSceneNarration] = useState('这里展示项目中的一段关键代码或实际运行结果。');
   const [addSceneCode, setAddSceneCode] = useState("print('hello world')");
   const [addSceneImage, setAddSceneImage] = useState<File | null>(null);
+  const [addSceneVideo, setAddSceneVideo] = useState<File | null>(null);
+  const [addSceneVideoUrl, setAddSceneVideoUrl] = useState('');
+  const [addSceneVideoDuration, setAddSceneVideoDuration] = useState(0);
+  const [addSceneVideoStart, setAddSceneVideoStart] = useState(0);
+  const [addSceneVideoEnd, setAddSceneVideoEnd] = useState(6);
+  const [addSceneVideoClips, setAddSceneVideoClips] = useState<ClipRange[]>([]);
   const [addSceneBusy, setAddSceneBusy] = useState(false);
   const jobSourceRef = useRef<EventSource | null>(null);
   const storyboardRef = useRef<Storyboard | null>(null);
+  const clipVideoRef = useRef<HTMLVideoElement | null>(null);
+  const clipDragTargetRef = useRef<'start' | 'end' | null>(null);
 
   useEffect(() => {
     api.system().then(setSystem).catch((error) => setMessage(error.message));
@@ -98,6 +111,20 @@ export function App() {
   useEffect(() => {
     return () => jobSourceRef.current?.close();
   }, []);
+
+  useEffect(() => {
+    if (!addSceneVideo) {
+      setAddSceneVideoUrl('');
+      setAddSceneVideoDuration(0);
+      return;
+    }
+    const url = URL.createObjectURL(addSceneVideo);
+    setAddSceneVideoUrl(url);
+    setAddSceneVideoStart(0);
+    setAddSceneVideoEnd(6);
+    setAddSceneVideoClips([]);
+    return () => URL.revokeObjectURL(url);
+  }, [addSceneVideo]);
 
   useEffect(() => {
     if (run?.storyboard) {
@@ -176,6 +203,7 @@ export function App() {
         repo_url: repoUrl,
         output_name: outputName || undefined,
         video_mode: videoMode,
+        storytelling_mode: 'experience_first',
         render_strategy: 'remotion-primary',
         render_profile: renderProfile,
         brand_mode: brandMode,
@@ -218,6 +246,7 @@ export function App() {
         repo_url: repoUrl,
         output_name: outputName || undefined,
         video_mode: videoMode,
+        storytelling_mode: 'experience_first',
         render_strategy: 'remotion-primary',
         render_profile: renderProfile,
         brand_mode: brandMode,
@@ -398,6 +427,7 @@ export function App() {
     setAddSceneBusy(true);
     try {
       let assetPath: string | null = null;
+      let mediaDuration: number | undefined;
       if (addSceneKind === 'image') {
         if (!addSceneImage) {
           setMessage('请先选择一张结果截图。');
@@ -410,14 +440,34 @@ export function App() {
         });
         assetPath = uploaded.asset_path;
       }
+      if (addSceneKind === 'video') {
+        if (!addSceneVideo) {
+          setMessage('请先选择一段录屏视频。');
+          return;
+        }
+        if (addSceneVideoEnd <= addSceneVideoStart) {
+          setMessage('视频结束时间必须大于开始时间。');
+          return;
+        }
+        const uploaded = await api.uploadUserVideo(run.project_id, run.run_id, {
+          filename: addSceneVideo.name,
+          file: addSceneVideo,
+          start: addSceneVideoStart,
+          end: addSceneVideoEnd,
+          clips: addSceneVideoClips.length ? addSceneVideoClips : undefined,
+        });
+        assetPath = uploaded.asset_path;
+        mediaDuration = uploaded.duration;
+      }
       const scene = createCustomScene({
         kind: addSceneKind,
         title: addSceneTitle,
         narration: addSceneNarration,
         code: addSceneCode,
         assetPath,
+        mediaDuration,
       });
-      const nextStoryboard = insertSceneAfter(currentStoryboard, selectedScene.id, scene);
+      const nextStoryboard = insertSceneAfter(currentStoryboard, recommendedInsertAfterSceneId(currentStoryboard), scene);
       storyboardRef.current = nextStoryboard;
       setStoryboard(nextStoryboard);
       setSelectedSceneId(scene.id);
@@ -429,6 +479,75 @@ export function App() {
     } finally {
       setAddSceneBusy(false);
     }
+  }
+
+  function handleClipLoaded() {
+    const duration = Number.isFinite(clipVideoRef.current?.duration) ? clipVideoRef.current?.duration ?? 0 : 0;
+    const safeDuration = Math.max(0, duration);
+    setAddSceneVideoDuration(safeDuration);
+    setAddSceneVideoStart(0);
+    setAddSceneVideoEnd(Math.min(6, Math.max(2, safeDuration || 6)));
+  }
+
+  function handleClipPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (!addSceneVideoDuration) return;
+    const seconds = secondsFromPointer(event, addSceneVideoDuration);
+    clipDragTargetRef.current = Math.abs(seconds - addSceneVideoStart) <= Math.abs(seconds - addSceneVideoEnd) ? 'start' : 'end';
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateClipPoint(clipDragTargetRef.current, seconds);
+  }
+
+  function handleClipPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!clipDragTargetRef.current || !addSceneVideoDuration) return;
+    updateClipPoint(clipDragTargetRef.current, secondsFromPointer(event, addSceneVideoDuration));
+  }
+
+  function handleClipPointerUp(event: PointerEvent<HTMLDivElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    clipDragTargetRef.current = null;
+  }
+
+  function updateClipPoint(target: 'start' | 'end', value: number) {
+    const minClip = 2;
+    const maxClip = 12;
+    const duration = addSceneVideoDuration || Math.max(addSceneVideoEnd, 6);
+    if (target === 'start') {
+      const lower = Math.max(0, addSceneVideoEnd - maxClip);
+      const upper = Math.max(0, addSceneVideoEnd - minClip);
+      const next = roundOne(clampNumber(value, lower, upper));
+      setAddSceneVideoStart(next);
+      if (clipVideoRef.current) clipVideoRef.current.currentTime = next;
+      return;
+    }
+    const lower = Math.min(duration, addSceneVideoStart + minClip);
+    const upper = Math.min(duration, addSceneVideoStart + maxClip);
+    const next = roundOne(clampNumber(value, lower, upper));
+    setAddSceneVideoEnd(next);
+    if (clipVideoRef.current) clipVideoRef.current.currentTime = Math.max(0, next - 0.4);
+  }
+
+  function addCurrentVideoClip() {
+    const nextClip = {start: roundOne(addSceneVideoStart), end: roundOne(addSceneVideoEnd)};
+    if (nextClip.end - nextClip.start < 2) {
+      setMessage('每个视频片段至少需要 2 秒。');
+      return;
+    }
+    const nextClips = [...addSceneVideoClips, nextClip].sort((left, right) => left.start - right.start);
+    if (nextClips.length > 6) {
+      setMessage('初版最多拼接 6 个片段。');
+      return;
+    }
+    if (totalClipDuration(nextClips) > 24) {
+      setMessage('多片段总时长请控制在 24 秒以内。');
+      return;
+    }
+    setAddSceneVideoClips(nextClips);
+  }
+
+  function removeVideoClip(index: number) {
+    setAddSceneVideoClips((clips) => clips.filter((_, clipIndex) => clipIndex !== index));
   }
 
   async function previewVoice() {
@@ -756,7 +875,8 @@ export function App() {
               </div>
               {addSceneOpen ? (
                 <div className="add-scene-panel">
-                  <div className="segmented two">
+                  <p className="muted-copy voice-hint">{recommendedInsertCopy(storyboard)}</p>
+                  <div className="segmented">
                     <button
                       type="button"
                       className={addSceneKind === 'code' ? 'active' : ''}
@@ -770,6 +890,13 @@ export function App() {
                       onClick={() => setAddSceneKind('image')}
                     >
                       结果截图
+                    </button>
+                    <button
+                      type="button"
+                      className={addSceneKind === 'video' ? 'active' : ''}
+                      onClick={() => setAddSceneKind('video')}
+                    >
+                      短视频
                     </button>
                   </div>
                   <label>
@@ -789,7 +916,8 @@ export function App() {
                         onChange={(event) => setAddSceneCode(event.target.value)}
                       />
                     </label>
-                  ) : (
+                  ) : null}
+                  {addSceneKind === 'image' ? (
                     <label>
                       结果截图
                       <input
@@ -799,9 +927,98 @@ export function App() {
                       />
                       <span className="muted-copy voice-hint">会保存到当前 run，并尽量压缩到最长边 1280。</span>
                     </label>
-                  )}
+                  ) : null}
+                  {addSceneKind === 'video' ? (
+                    <div className="video-clip-fields">
+                      <label>
+                        录屏视频
+                        <input
+                          type="file"
+                          accept="video/mp4,video/webm,video/quicktime,video/x-matroska"
+                          onChange={(event) => setAddSceneVideo(event.target.files?.[0] ?? null)}
+                        />
+                        <span className="muted-copy voice-hint">上传长录屏后，拖动下方开始/结束针选择 2-12 秒片段。</span>
+                      </label>
+                      {addSceneVideoUrl ? (
+                        <div className="clip-preview">
+                          <video
+                            ref={clipVideoRef}
+                            src={addSceneVideoUrl}
+                            controls
+                            muted
+                            className="clip-video"
+                            onLoadedMetadata={handleClipLoaded}
+                          />
+                          <div
+                            className="clip-timeline"
+                            role="slider"
+                            aria-label="选择视频片段"
+                            aria-valuemin={0}
+                            aria-valuemax={roundOne(addSceneVideoDuration)}
+                            aria-valuetext={`${formatClipTime(addSceneVideoStart)} 到 ${formatClipTime(addSceneVideoEnd)}`}
+                            onPointerDown={handleClipPointerDown}
+                            onPointerMove={handleClipPointerMove}
+                            onPointerUp={handleClipPointerUp}
+                            onPointerCancel={handleClipPointerUp}
+                          >
+                            <div className="clip-track" />
+                            <div
+                              className="clip-selection"
+                              style={{
+                                left: `${clipPercent(addSceneVideoStart, addSceneVideoDuration)}%`,
+                                width: `${clipPercent(addSceneVideoEnd - addSceneVideoStart, addSceneVideoDuration)}%`,
+                              }}
+                            />
+                            <div
+                              className="clip-pin start"
+                              style={{left: `${clipPercent(addSceneVideoStart, addSceneVideoDuration)}%`}}
+                            >
+                              开始
+                            </div>
+                            <div
+                              className="clip-pin end"
+                              style={{left: `${clipPercent(addSceneVideoEnd, addSceneVideoDuration)}%`}}
+                            >
+                              结束
+                            </div>
+                          </div>
+                          <div className="clip-meta">
+                            <span>{formatClipTime(addSceneVideoStart)}</span>
+                            <strong>{roundOne(addSceneVideoEnd - addSceneVideoStart)}s</strong>
+                            <span>{formatClipTime(addSceneVideoEnd)}</span>
+                          </div>
+                          <button type="button" className="secondary-action" onClick={addCurrentVideoClip}>
+                            + 添加当前片段
+                          </button>
+                          <div className="clip-list">
+                            {addSceneVideoClips.length ? (
+                              <>
+                                <div className="clip-list-head">
+                                  <span>拼接片段</span>
+                                  <strong>{roundOne(totalClipDuration(addSceneVideoClips))}s</strong>
+                                </div>
+                                {addSceneVideoClips.map((clip, index) => (
+                                  <div key={`${clip.start}-${clip.end}-${index}`} className="clip-list-item">
+                                    <span>{String(index + 1).padStart(2, '0')}</span>
+                                    <strong>
+                                      {formatClipTime(clip.start)} - {formatClipTime(clip.end)}
+                                    </strong>
+                                    <button type="button" onClick={() => removeVideoClip(index)}>
+                                      删除
+                                    </button>
+                                  </div>
+                                ))}
+                              </>
+                            ) : (
+                              <p className="muted-copy voice-hint">未添加片段时，会直接使用当前双针选择。</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <button type="button" className="primary" onClick={addCustomScene} disabled={addSceneBusy}>
-                    {addSceneBusy ? '添加中...' : '添加到当前 scene 后面'}
+                    {addSceneBusy ? '添加中...' : '添加到建议位置'}
                   </button>
                 </div>
               ) : null}
@@ -962,33 +1179,52 @@ function joinRunPath(runDir: string, artifactPath: string) {
 }
 
 function createCustomScene(options: {
-  kind: 'code' | 'image';
+  kind: 'code' | 'image' | 'video';
   title: string;
   narration: string;
   code: string;
   assetPath: string | null;
+  mediaDuration?: number;
 }): Scene {
   const id = `user-${options.kind}-${Date.now().toString(36)}`;
-  const title = options.title.trim() || (options.kind === 'code' ? '代码片段' : '结果画面');
+  const title = options.title.trim() || (options.kind === 'code' ? '代码片段' : '真实结果');
+  const sceneDuration =
+    options.kind === 'video'
+      ? clampNumber(roundOne((options.mediaDuration || 6) + 0.4), 3, 24)
+      : options.kind === 'code'
+        ? 4.5
+        : 5;
   return {
     id,
     type: options.kind === 'code' ? 'code' : 'result_media',
     start: 0,
-    duration: options.kind === 'code' ? 4.5 : 5,
-    narration: options.narration.trim() || '这里展示项目中的一段关键代码或实际运行结果。',
+    duration: sceneDuration,
+    narration: options.narration.trim() || '这里展示项目中的一段真实操作、关键代码或实际运行结果。',
     visual: {
       layout: options.kind === 'code' ? 'code' : 'result_media',
       headline: title,
-      caption: options.kind === 'code' ? 'Terminal output' : 'Result preview',
+      caption: options.kind === 'code' ? 'Terminal output' : options.kind === 'video' ? 'Demo clip' : 'Result preview',
       bullets: [title],
       code: options.kind === 'code' ? compactCodeSnippet(options.code) : null,
       asset_path: options.assetPath,
       asset_type: 'none',
       focus_target: 'none',
-      media_type: options.kind === 'image' ? 'image' : 'none',
+      media_type: options.kind === 'video' ? 'video' : options.kind === 'image' ? 'image' : 'none',
       animation: 'rise',
     },
   };
+}
+
+function recommendedInsertAfterSceneId(storyboard: Storyboard): string {
+  if (storyboard.scenes.length >= 5) return storyboard.scenes[2].id;
+  if (storyboard.scenes.length >= 3) return storyboard.scenes[1].id;
+  return storyboard.scenes[0]?.id ?? '';
+}
+
+function recommendedInsertCopy(storyboard: Storyboard | null): string {
+  if (!storyboard?.scenes.length) return '建议：生成分镜后，把真实使用画面放在开场之后、结尾之前。';
+  const index = storyboard.scenes.findIndex((scene) => scene.id === recommendedInsertAfterSceneId(storyboard));
+  return `建议插入位置：第 ${Math.max(1, index + 1)} 幕之后，避开开场和结尾。`;
 }
 
 function insertSceneAfter(storyboard: Storyboard, sceneId: string, newScene: Scene): Storyboard {
@@ -1018,6 +1254,40 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(new Error('图片读取失败。'));
     reader.readAsDataURL(file);
   });
+}
+
+function secondsFromPointer(event: PointerEvent<HTMLDivElement>, duration: number): number {
+  const rect = event.currentTarget.getBoundingClientRect();
+  if (!rect.width) return 0;
+  const ratio = (event.clientX - rect.left) / rect.width;
+  return clampNumber(ratio * duration, 0, duration);
+}
+
+function clipPercent(value: number, duration: number): number {
+  if (!duration) return 0;
+  return clampNumber((value / duration) * 100, 0, 100);
+}
+
+function totalClipDuration(clips: ClipRange[]): number {
+  return clips.reduce((total, clip) => total + Math.max(0, clip.end - clip.start), 0);
+}
+
+function formatClipTime(seconds: number): string {
+  const safe = Math.max(0, seconds || 0);
+  const minutes = Math.floor(safe / 60);
+  const rest = Math.floor(safe % 60);
+  const tenth = Math.floor((safe % 1) * 10);
+  return `${minutes}:${String(rest).padStart(2, '0')}.${tenth}`;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  if (max < min) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
+function roundOne(value: number): number {
+  return Math.round((value || 0) * 10) / 10;
 }
 
 function parseJobEvent(event: Event): JobEvent {

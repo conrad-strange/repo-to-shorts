@@ -75,6 +75,7 @@ export interface WorkflowRequest {
   output_name?: string;
   out_dir?: string;
   video_mode: VideoMode;
+  storytelling_mode?: 'experience_first' | 'technical_explainer';
   render_strategy: string;
   render_profile: RenderProfile;
   brand_mode: BrandMode;
@@ -130,4 +131,11 @@ export interface UserImageAssetResponse {
   asset_path: string;
   run_asset_path: string;
   bytes: number;
+}
+
+export interface UserVideoAssetResponse extends UserImageAssetResponse {
+  start: number;
+  end: number;
+  duration: number;
+  clips?: Array<{start: number; end: number; duration: number}>;
 }

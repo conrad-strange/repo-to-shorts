@@ -1,5 +1,6 @@
 from pathlib import Path
 import getpass
+import os
 import re
 import shutil
 import subprocess
@@ -308,16 +309,49 @@ def _run_portable_tools_installer() -> None:
     if not script.exists():
         raise FileNotFoundError(f"Portable tools script does not exist: {script}")
     console.print("[cyan]Installing portable Node.js and FFmpeg under .tools...[/cyan]")
-    subprocess.run(
-        [
-            "powershell",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            str(script),
-        ],
-        check=True,
-    )
+    powershell = _find_powershell_exe()
+    if powershell is None:
+        console.print(
+            "[red]PowerShell was not found.[/red]\n"
+            "Please check that Windows PowerShell exists at "
+            "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe, "
+            "or add PowerShell/pwsh to PATH, then rerun: gva setup --portable"
+        )
+        raise typer.Exit(1)
+    try:
+        subprocess.run(
+            [
+                str(powershell),
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(script),
+            ],
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        console.print(
+            "[red]Portable tools installer failed.[/red]\n"
+            "If the error mentions ZipArchive, Expand-Archive, or a missing central directory, "
+            "the downloaded zip is likely damaged. Delete .tools/downloads and rerun: gva setup --portable"
+        )
+        raise typer.Exit(exc.returncode)
+
+
+def _find_powershell_exe() -> Path | None:
+    for name in ("powershell.exe", "powershell", "pwsh.exe", "pwsh"):
+        found = shutil.which(name)
+        if found:
+            return Path(found)
+    windir = Path(os.environ.get("WINDIR", r"C:\Windows"))
+    candidates = [
+        windir / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe",
+        windir / "Sysnative" / "WindowsPowerShell" / "v1.0" / "powershell.exe",
+        Path(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"),
+        Path(r"C:\Windows\Sysnative\WindowsPowerShell\v1.0\powershell.exe"),
+        Path(r"C:\Program Files\PowerShell\7\pwsh.exe"),
+    ]
+    return next((path for path in candidates if path.exists()), None)
 
 
 def _prompt_for_missing_llm(settings: Settings, yes: bool = False) -> None:

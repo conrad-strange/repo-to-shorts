@@ -5,6 +5,7 @@ import type {
   Storyboard,
   TtsPreviewResponse,
   UserImageAssetResponse,
+  UserVideoAssetResponse,
   WorkflowRequest,
 } from './types';
 
@@ -70,6 +71,28 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  uploadUserVideo: (
+    projectId: string,
+    runId: string,
+    payload: {filename: string; file: File; start: number; end: number; clips?: Array<{start: number; end: number}>},
+  ) => {
+    const params = new URLSearchParams({
+      filename: payload.filename,
+      start: String(payload.start),
+      end: String(payload.end),
+    });
+    if (payload.clips?.length) {
+      params.set('clips', JSON.stringify(payload.clips));
+    }
+    return requestRaw<UserVideoAssetResponse>(
+      `/api/projects/${projectId}/runs/${runId}/assets/user-video?${params.toString()}`,
+      {
+        method: 'POST',
+        headers: {'Content-Type': payload.file.type || 'application/octet-stream'},
+        body: payload.file,
+      },
+    );
+  },
   rerender: (projectId: string, runId: string, payload: RerenderPayload) =>
     request<RunDetail>(`/api/projects/${projectId}/runs/${runId}/rerender`, {
       method: 'POST',
@@ -85,3 +108,12 @@ export const api = {
       body: JSON.stringify({project_id: projectId, run_id: runId, ...payload}),
     }),
 };
+
+async function requestRaw<T>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(path, options);
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response);
+    throw new Error(detail || `${response.status} ${response.statusText}`);
+  }
+  return response.json() as Promise<T>;
+}

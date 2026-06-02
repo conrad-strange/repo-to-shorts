@@ -1,5 +1,5 @@
 import React from 'react';
-import {Easing, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
+import {Easing, interpolate, OffthreadVideo, staticFile, spring, useCurrentFrame, useVideoConfig} from 'remotion';
 import type {Scene} from '../types';
 import {theme} from '../styles/theme';
 import {accentOf, SceneShell} from './sceneKit';
@@ -9,6 +9,7 @@ export const ResultMediaScene: React.FC<{scene: Scene}> = ({scene}) => {
   const {fps} = useVideoConfig();
   const accent = accentOf(scene);
   const asset = scene.visual.asset_path;
+  const isVideo = scene.visual.media_type === 'video';
   const intro = spring({frame, fps, config: {damping: 18, stiffness: 110}});
   const y = interpolate(intro, [0, 1], [34, 0]);
   const scale = interpolate(frame, [0, scene.duration * fps], [1.015, 1.06], {
@@ -62,7 +63,18 @@ export const ResultMediaScene: React.FC<{scene: Scene}> = ({scene}) => {
               background: '#010409',
             }}
           >
-            {asset ? (
+            {asset && isVideo ? (
+              <OffthreadVideo
+                src={staticFile(asset)}
+                muted
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  transform: `scale(${scale})`,
+                }}
+              />
+            ) : asset ? (
               <img
                 src={staticFile(asset)}
                 style={{
@@ -73,7 +85,7 @@ export const ResultMediaScene: React.FC<{scene: Scene}> = ({scene}) => {
                 }}
               />
             ) : (
-              <div style={{color: theme.muted, fontSize: 34}}>No result image</div>
+              <div style={{color: theme.muted, fontSize: 34}}>No result media</div>
             )}
           </div>
         </div>

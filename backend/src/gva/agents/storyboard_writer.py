@@ -24,6 +24,8 @@ def write_storyboard(script: VideoScript, settings: Settings) -> Storyboard:
                 {
                     "video_mode": settings.video_mode,
                     "mode_notes": _mode_notes(settings.video_mode),
+                    "storytelling_mode": settings.storytelling_mode,
+                    "storytelling_notes": _storytelling_notes(settings.storytelling_mode),
                     "video_script": script.model_dump(),
                 },
                 ensure_ascii=False,
@@ -121,6 +123,16 @@ def normalize_storyboard_timing(storyboard: Storyboard) -> Storyboard:
         normalized.append(scene)
     storyboard.scenes = normalized
     return storyboard
+
+
+def _storytelling_notes(storytelling_mode: str) -> str:
+    if storytelling_mode == "experience_first":
+        return (
+            "Default to a real-experience structure when possible: hook, repo/value card, user action or result, "
+            "light technical proof, CTA. Visual text should be keywords only. If no user-provided demo media exists, "
+            "fall back to README/code evidence cards instead of inventing an input/output demo."
+        )
+    return "Use the existing technical repo explainer storyboard structure."
 
 
 def _string_list(value: object) -> list[str]:

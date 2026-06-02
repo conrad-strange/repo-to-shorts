@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     tts_rate: str = "+25%"
     render_strategy: str = "remotion-primary"
     video_mode: str = "standard_60s"
+    storytelling_mode: str = "experience_first"
     render_profile: str = "final"
     brand_mode: str = "rs"
     bomb_circle: str = "科技圈"
