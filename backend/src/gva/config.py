@@ -1,6 +1,7 @@
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,6 +50,20 @@ class Settings(BaseSettings):
     npm_cmd: Optional[Path] = None
     ffmpeg_exe: Optional[Path] = None
     chrome_exe: Optional[Path] = None
+
+    @field_validator("remotion_concurrency", mode="before")
+    @classmethod
+    def _empty_int_as_none(cls, value: Any) -> Any:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("node_exe", "npm_cmd", "ffmpeg_exe", "chrome_exe", mode="before")
+    @classmethod
+    def _empty_path_as_none(cls, value: Any) -> Any:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     model_config = SettingsConfigDict(
         env_file=".env",

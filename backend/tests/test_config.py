@@ -1,0 +1,27 @@
+from pathlib import Path
+
+from gva.config import Settings
+
+
+def test_settings_treats_empty_optional_values_as_none(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "REMOTION_CONCURRENCY=",
+                "NODE_EXE=",
+                "NPM_CMD=",
+                "FFMPEG_EXE=",
+                "CHROME_EXE=",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=env_path)
+
+    assert settings.remotion_concurrency is None
+    assert settings.node_exe is None
+    assert settings.npm_cmd is None
+    assert settings.ffmpeg_exe is None
+    assert settings.chrome_exe is None
