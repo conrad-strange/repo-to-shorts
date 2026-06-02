@@ -58,9 +58,9 @@ interface VerificationDetailsSummary {
 }
 
 export function App() {
-  const [repoUrl, setRepoUrl] = useState('https://github.com/conrad-strange/rag-demo');
+  const [repoUrl, setRepoUrl] = useState('https://github.com/conrad-strange/repo-to-shorts');
   const [repoUrlTouched, setRepoUrlTouched] = useState(false);
-  const [outputName, setOutputName] = useState('rag-demo');
+  const [outputName, setOutputName] = useState('conrad-strange-repo-to-shorts');
   const [outputNameTouched, setOutputNameTouched] = useState(false);
   const [videoMode, setVideoMode] = useState<VideoMode>('short_30s');
   const [renderProfile, setRenderProfile] = useState<RenderProfile>('preview');
