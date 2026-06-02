@@ -1,11 +1,13 @@
-# Keep source files stable across Windows/macOS/Linux.
+# Normalize text files across Windows/macOS/Linux.
 * text=auto
 
+# Source and config files use LF.
 *.py text eol=lf
 *.md text eol=lf
 *.txt text eol=lf
 *.toml text eol=lf
 *.json text eol=lf
+*.jsonl text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
 *.js text eol=lf
@@ -14,14 +16,19 @@
 *.tsx text eol=lf
 *.css text eol=lf
 *.html text eol=lf
-.gitattributes text eol=lf
+*.svg text eol=lf
+*.env.example text eol=lf
 .gitignore text eol=lf
+.gitattributes text eol=lf
+requirements.txt text eol=lf
+package-lock.json text eol=lf
 
-# Windows helper scripts.
+# Windows helper scripts use CRLF.
 *.cmd text eol=crlf
 *.bat text eol=crlf
 *.ps1 text eol=crlf
 
+# Binary assets and generated media.
 *.png binary
 *.jpg binary
 *.jpeg binary
@@ -32,4 +39,8 @@
 *.mp3 binary
 *.mp4 binary
 *.mov binary
+*.m4v binary
+*.webm binary
 *.wav binary
+*.m4a binary
+*.aac binary

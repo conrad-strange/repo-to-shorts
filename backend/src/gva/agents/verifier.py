@@ -185,6 +185,8 @@ def _llm_claim_checks(
     prompt = (
         "You are a strict verifier for a Chinese GitHub project explainer video. "
         "Only mark a claim supported if it is directly supported by the evidence excerpts. "
+        "Comedic opening hooks such as '科技圈今天又炸了' are stylistic packaging; "
+        "do not treat them as unsupported high-risk claims unless they assert a concrete product capability. "
         "Simple calls to action such as viewing the repository, reading README, cloning, or starring "
         "are marketing CTAs and should not be marked high severity just because the repo did not ask for them. "
         "Return JSON with a `claims` array. Each item must contain id, status "

@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 from pathlib import Path
 from typing import Any, Callable
@@ -26,6 +27,7 @@ from gva.core.runs import allocate_run
 from gva.core.tts import run_tts_timing
 from gva.core.visual_assets import prepare_visual_assets
 from gva.models.render import WorkflowResult
+from gva.models.storyboard import MicroBeat
 
 ProgressCallback = Callable[[dict[str, Any]], None]
 
@@ -51,6 +53,7 @@ def run_render_workflow(
     The first real milestone will replace this with:
     repo scan -> project insight -> script -> storyboard -> verification.
     """
+    _apply_brand_defaults(settings)
     _emit_progress(progress_callback, "repo", "读取 GitHub 仓库", 5)
     project_path = resolve_project_source(project_path, repo_url, settings.repo_cache_dir)
     root_output_dir = output_dir.resolve()
@@ -87,6 +90,12 @@ def run_render_workflow(
         "tts_rate": settings.tts_rate,
         "video_mode": settings.video_mode,
         "render_profile": settings.render_profile,
+        "brand_mode": settings.brand_mode,
+        "bomb_circle": settings.bomb_circle,
+        "bomb_again_count": settings.bomb_again_count,
+        "rb_tts_voice": settings.rb_tts_voice,
+        "rb_tts_rate": settings.rb_tts_rate,
+        "rb_hook_duration_seconds": settings.rb_hook_duration_seconds,
         "remotion_concurrency": settings.remotion_concurrency,
         "repair_enabled": settings.repair_enabled,
         "repo_summary_path": str(summary_path),
@@ -145,6 +154,10 @@ def run_render_workflow(
         if not script.segments or not any(segment.evidence_refs for segment in script.segments):
             _attach_script_evidence_refs(script, evidence_index)
             script_path.write_text(script.model_dump_json(indent=2), encoding="utf-8")
+        if _apply_bomb_mode_to_script(script, settings):
+            script_path.write_text(script.model_dump_json(indent=2), encoding="utf-8")
+            script_md_path.write_text(render_script_markdown(script), encoding="utf-8")
+            metadata["bomb_hook"] = _bomb_hook_text(settings)
 
         storyboard_path = output_dir / "storyboard.json"
         storyboard_raw_path = output_dir / "storyboard.raw.json"
@@ -178,6 +191,9 @@ def run_render_workflow(
         pacing_changed = False
         web_edited_storyboard = (output_dir / "logs" / "web-edited-storyboard.json").exists()
         _emit_progress(progress_callback, "storyboard", "准备 GitHub/README 视觉资产", 60)
+        if _apply_bomb_mode_to_storyboard(storyboard, settings, repo_url):
+            metadata["bomb_hook"] = _bomb_hook_text(settings)
+            pacing_changed = True
         if web_edited_storyboard:
             _copy_existing_visual_assets_to_public(output_dir, settings.renderer_dir.resolve())
             metadata["web_edited_storyboard"] = True
@@ -193,6 +209,9 @@ def run_render_workflow(
             pacing_changed = tighten_storyboard_for_video_mode(storyboard, settings.video_mode, repo_url) or pacing_changed
         if _soften_risky_video_claims(storyboard):
             metadata["risky_claims_softened"] = True
+            pacing_changed = True
+        if _apply_bomb_mode_to_storyboard(storyboard, settings, repo_url):
+            metadata["bomb_hook"] = _bomb_hook_text(settings)
             pacing_changed = True
         _attach_storyboard_evidence_refs(storyboard, script, evidence_index)
         storyboard_path.write_text(storyboard.model_dump_json(indent=2), encoding="utf-8")
@@ -243,6 +262,11 @@ def run_render_workflow(
                 pacing_changed = tighten_storyboard_for_video_mode(storyboard, settings.video_mode, repo_url) or pacing_changed
                 if _soften_risky_video_claims(storyboard):
                     metadata["risky_claims_softened_after_repair"] = True
+                    pacing_changed = True
+                if _apply_bomb_mode_to_script(script, settings):
+                    metadata["bomb_hook"] = _bomb_hook_text(settings)
+                if _apply_bomb_mode_to_storyboard(storyboard, settings, repo_url):
+                    metadata["bomb_hook"] = _bomb_hook_text(settings)
                     pacing_changed = True
                 _attach_storyboard_evidence_refs(storyboard, script, evidence_index)
                 script_path.write_text(script.model_dump_json(indent=2), encoding="utf-8")
@@ -432,6 +456,122 @@ def _soften_risky_text(text: str) -> str:
     for old, new in replacements.items():
         softened = softened.replace(old, new)
     return softened
+
+
+def _apply_bomb_mode_to_script(script, settings: Settings) -> bool:
+    if not _is_bomb_mode(settings):
+        return False
+    hook = _bomb_hook_text(settings)
+    changed = False
+    if script.title != hook:
+        script.title = hook
+        changed = True
+    if script.segments:
+        first = script.segments[0]
+        next_narration = _prepend_bomb_hook(first.narration, hook)
+        if first.narration != next_narration:
+            first.narration = next_narration
+            changed = True
+        if first.scene_hint != "bomb_hook":
+            first.scene_hint = "bomb_hook"
+            changed = True
+    full_text = "\n".join(segment.narration.strip() for segment in script.segments if segment.narration.strip())
+    if script.full_text != full_text:
+        script.full_text = full_text
+        changed = True
+    return changed
+
+
+def _apply_bomb_mode_to_storyboard(storyboard, settings: Settings, repo_url: str | None) -> bool:
+    if not _is_bomb_mode(settings) or not storyboard.scenes:
+        return False
+    hook = _bomb_hook_text(settings)
+    first = storyboard.scenes[0]
+    changed = False
+    if first.type != "bomb_hook":
+        first.type = "bomb_hook"
+        changed = True
+    if first.visual.layout != "github_hero":
+        first.visual.layout = "github_hero"
+        changed = True
+    if first.visual.headline != hook:
+        first.visual.headline = hook
+        changed = True
+    next_narration = _prepend_bomb_hook(first.narration, hook)
+    if first.narration != next_narration:
+        first.narration = next_narration
+        changed = True
+    if first.visual.caption != "先别急着滑走，看证据":
+        first.visual.caption = "先别急着滑走，看证据"
+        changed = True
+    if first.visual.accent_color != "#f85149":
+        first.visual.accent_color = "#f85149"
+        changed = True
+    hook_duration = _bomb_hook_duration(settings)
+    if abs(float(first.duration) - hook_duration) > 0.05:
+        first.duration = hook_duration
+        changed = True
+    if first.visual.repo_url is None and repo_url:
+        first.visual.repo_url = repo_url
+        changed = True
+    if first.visual.repo_display_url is None and repo_url:
+        first.visual.repo_display_url = repo_url.replace("https://", "")
+        changed = True
+    bomb_beats = [
+        MicroBeat(text="爆点开场", kind="warning", emphasis="hook", start_ratio=0.08),
+        MicroBeat(text="真实仓库", kind="text", emphasis="evidence", start_ratio=0.34),
+        MicroBeat(text="看完再 Star", kind="cta", emphasis="github", start_ratio=0.62),
+    ]
+    if [beat.text for beat in first.visual.micro_beats[:3]] != [beat.text for beat in bomb_beats]:
+        first.visual.micro_beats = bomb_beats
+        changed = True
+    return changed
+
+
+def _is_bomb_mode(settings: Settings) -> bool:
+    return str(settings.brand_mode).strip().lower() in {"rb", "repo-to-bombs", "bomb", "bombs"}
+
+
+def _apply_brand_defaults(settings: Settings) -> None:
+    if not _is_bomb_mode(settings):
+        return
+    if not settings.tts_voice or settings.tts_voice == "zh-CN-XiaoxiaoNeural":
+        settings.tts_voice = settings.rb_tts_voice
+    if not settings.tts_rate or settings.tts_rate in {"+0%", "+25%"}:
+        settings.tts_rate = settings.rb_tts_rate
+
+
+def _bomb_hook_text(settings: Settings) -> str:
+    circle = _clean_bomb_circle(settings.bomb_circle)
+    again_count = max(1, min(8, int(settings.bomb_again_count or 1)))
+    return f"{circle}今天{'又' * again_count}炸了！"
+
+
+def _bomb_hook_duration(settings: Settings) -> float:
+    try:
+        duration = float(settings.rb_hook_duration_seconds)
+    except (TypeError, ValueError):
+        duration = 3.0
+    return round(max(2.5, min(4.0, duration)), 2)
+
+
+def _clean_bomb_circle(value: str | None) -> str:
+    cleaned = "".join(ch for ch in (value or "").strip() if ch not in "<>{}[]|\\^`\"'，。；：")
+    cleaned = cleaned.replace(" ", "")[:10]
+    if not cleaned:
+        cleaned = "科技圈"
+    if not cleaned.endswith("圈"):
+        cleaned = f"{cleaned}圈"
+    return cleaned
+
+
+def _prepend_bomb_hook(text: str, hook: str) -> str:
+    cleaned = _strip_bomb_hook(text)
+    return hook if not cleaned else f"{hook} {cleaned}"
+
+
+def _strip_bomb_hook(text: str) -> str:
+    return re.sub(r"^\s*[\w\u4e00-\u9fff]{1,12}圈今天又{1,8}炸了[!！]?\s*", "", text or "").strip()
 
 
 def _attach_script_evidence_refs(script, evidence_index) -> None:

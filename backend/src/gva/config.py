@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     render_strategy: str = "remotion-primary"
     video_mode: str = "standard_60s"
     render_profile: str = "final"
+    brand_mode: str = "rs"
+    bomb_circle: str = "科技圈"
+    bomb_again_count: int = 1
+    rb_tts_voice: str = "zh-CN-YunxiNeural"
+    rb_tts_rate: str = "+38%"
+    rb_hook_duration_seconds: float = 3.0
     remotion_concurrency: Optional[int] = None
     repair_enabled: bool = True
     repair_max_attempts: int = 1

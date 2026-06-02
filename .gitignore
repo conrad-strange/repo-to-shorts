@@ -5,45 +5,59 @@
 
 # Python
 .venv/
+venv/
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-*.egg-info/
+.coverage
+htmlcov/
 backend/.tmp_pytest/
 .tmp/
 
-# JavaScript / frontend builds
+# JavaScript
 node_modules/
 dist/
 build/
 .next/
 *.tsbuildinfo
 
-# Local runtime state
+# Local tools and agent state
 .cache/
 .remotion/
 .tools/
 .codex/
 *.log
 
-# Runtime render inputs and generated media. Keep only placeholder files.
+# Generated outputs. Keep only placeholders.
 outputs/*
 !outputs/.gitkeep
 renderer/outputs/
 renderer/public/generated/
 !renderer/public/.gitkeep
 
-# Large generated media
+# Generated media
 *.mp4
 *.mov
 *.m4v
+*.webm
 *.mp3
 *.wav
 *.m4a
 *.aac
 
+# Local databases or temporary artifacts
+*.sqlite
+*.sqlite3
+*.db
+*.tmp
+*.bak
+
 # OS noise
 .DS_Store
 Thumbs.db
+desktop.ini

@@ -1,73 +1,67 @@
 <h1 align="center">Repo to Shorts</h1>
 
 <p align="center">
-  把公开 GitHub 仓库自动生成中文 9:16 竖屏项目讲解短视频。
+  输入一个公开 GitHub 仓库，生成中文 9:16 项目讲解短视频。
 </p>
 
 <p align="center">
   <img alt="Python" src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white">
-  <img alt="Remotion" src="https://img.shields.io/badge/Remotion-4.x-000000?style=flat-square">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Web_UI-009688?style=flat-square&logo=fastapi&logoColor=white">
+  <img alt="Remotion" src="https://img.shields.io/badge/Remotion-4.x-000000?style=flat-square">
   <img alt="Video" src="https://img.shields.io/badge/Video-9%3A16_MP4-58A6FF?style=flat-square">
 </p>
 
 ---
 
-## 简介
+## What It Does
 
-Repo to Shorts 是一个面向开源开发者的 AI 工程项目：输入一个公开 GitHub 仓库，系统会分析 README、目录结构、配置文件和核心代码，生成中文讲解稿、分镜、TTS 配音，并用 Remotion 渲染成适合手机平台发布的竖屏 MP4。
+Repo to Shorts 是一个面向开源开发者的 AI 视频生成工具。它会读取公开 GitHub 仓库的 README、目录结构、配置文件和核心代码，生成中文讲解稿、分镜、字幕、TTS 配音，并用 Remotion 渲染成适合手机平台发布的竖屏 MP4。
 
-它不是通用 AI 视频生成器，也不依赖 Sora / Veo / 可灵这类视频大模型。当前主线是 **LLM 内容生成 + 证据校验 + 程序化视频渲染**，优先保证文字准确、画面可控、结果可复现。
-
-## 当前能力
-
-<table>
-  <tr>
-    <td><strong>输入</strong></td>
-    <td>公开 GitHub 仓库 URL</td>
-  </tr>
-  <tr>
-    <td><strong>内容生成</strong></td>
-    <td>项目理解、中文讲解稿、storyboard、字幕 cue</td>
-  </tr>
-  <tr>
-    <td><strong>可靠性</strong></td>
-    <td>基于 README / 配置 / 代码证据的 Verifier 与轻量 Repair Agent</td>
-  </tr>
-  <tr>
-    <td><strong>视频渲染</strong></td>
-    <td>Remotion 9:16 竖屏视频，支持 preview / final 两档渲染</td>
-  </tr>
-  <tr>
-    <td><strong>调试界面</strong></td>
-    <td>FastAPI 托管 React UI，支持分镜编辑、TTS 音色选择、生成新版</td>
-  </tr>
-</table>
-
-## 技术栈
+它不是通用 AI 视频生成器，也不依赖视频大模型。当前主线是：
 
 ```text
-GitHub URL
-  -> Repo Reader
+GitHub Repo
+  -> Repo Analyzer
   -> Evidence Index
-  -> Project Understanding Agent
-  -> Script Writer Agent
-  -> Storyboard Agent
-  -> Verifier / Repair Agent
+  -> Script / Storyboard Agents
+  -> Verifier / Repair
   -> Edge TTS + Captions
   -> Remotion Renderer
   -> 9:16 MP4
 ```
 
-- Backend：Python、Typer、FastAPI、Pydantic、GitPython
-- LLM：默认 DeepSeek OpenAI-compatible API
-- TTS：Edge TTS，默认不需要 API key
-- Renderer：Remotion、FFmpeg
-- Web UI：React + Vite，由 FastAPI 统一托管
+## Features
 
-## 快速开始
+<table>
+  <tr>
+    <td><strong>GitHub 输入</strong></td>
+    <td>输入公开仓库 URL，自动 clone 并分析项目内容。</td>
+  </tr>
+  <tr>
+    <td><strong>证据链</strong></td>
+    <td>基于 README、配置文件和代码生成内容，减少无依据夸大。</td>
+  </tr>
+  <tr>
+    <td><strong>中文脚本</strong></td>
+    <td>生成适合短视频节奏的讲解稿、分镜和字幕 cue。</td>
+  </tr>
+  <tr>
+    <td><strong>程序化视频</strong></td>
+    <td>Remotion 渲染 9:16 MP4，支持 preview / final 两档输出。</td>
+  </tr>
+  <tr>
+    <td><strong>Web UI</strong></td>
+    <td>本地 FastAPI + React 界面，支持分镜编辑、TTS 音色选择、生成新版。</td>
+  </tr>
+  <tr>
+    <td><strong>Repo to Bombs</strong></td>
+    <td>实验性的引流模式，用更夸张的 hook 包装开场，但项目事实仍走校验。</td>
+  </tr>
+</table>
 
-### 1. 安装 Python 依赖
+## Quick Start
+
+### 1. Python
 
 ```powershell
 conda create -n repo-video-agent python=3.11 -y
@@ -76,7 +70,9 @@ pip install -r requirements.txt
 pip install -e backend
 ```
 
-### 2. 安装前端和渲染依赖
+### 2. Node / Remotion
+
+Vite 需要 Node.js 20.19+ 或 22.12+。如果系统 Node 版本较低，可以在 `.env` 中配置 `NODE_EXE` / `NPM_CMD` 指向本地或项目内的 Node。
 
 ```powershell
 cd renderer
@@ -89,9 +85,7 @@ npm run build
 cd ..
 ```
 
-> Vite 需要 Node.js 20.19+ 或 22.12+。如果系统 Node 版本较低，可以在 `.env` 中配置项目自带或本地安装的 `NODE_EXE` / `NPM_CMD`。
-
-### 3. 配置环境变量
+### 3. Environment
 
 ```powershell
 copy .env.example .env
@@ -110,7 +104,9 @@ FFMPEG_EXE=D:\path\to\ffmpeg.exe
 CHROME_EXE=C:\Program Files\Google\Chrome\Application\chrome.exe
 ```
 
-## 使用方式
+Edge TTS 默认不需要 API key。
+
+## Usage
 
 ### Web UI
 
@@ -119,13 +115,13 @@ conda activate repo-video-agent
 gva ui
 ```
 
-默认打开：
+打开：
 
 ```text
 http://127.0.0.1:7860
 ```
 
-网页端默认生成 `short_30s`、`preview` 版本，适合快速编辑。确认分镜后可切换到 `final` 输出 1080x1920 MP4。
+网页端默认使用 `short_30s + preview`，适合快速看节奏；确认后可切换到 `final` 输出 1080x1920 MP4。
 
 ### CLI
 
@@ -138,7 +134,7 @@ conda run -n repo-video-agent gva render `
   --no-dry-run
 ```
 
-## 输出结构
+## Output
 
 每次生成都会创建独立 run：
 
@@ -163,34 +159,41 @@ outputs/<project>/runs/0001/
   video.mp4
 ```
 
-最终视频位置：
+最终视频：
 
 ```text
 outputs/<project>/runs/<run_id>/video.mp4
 ```
 
-## 项目结构
+`outputs/` 默认不会提交到 GitHub。
+
+## Project Structure
 
 ```text
 backend/      Python workflow、agents、models、CLI、FastAPI API
-frontend/     React/Vite 三栏式编辑与预览界面
+frontend/     React/Vite 本地 Web UI
 renderer/     Remotion 竖屏视频模板
 docs/         架构、输出产物、Web UI 规划
 examples/     示例 storyboard
 outputs/      本地生成结果，默认不提交
-scripts/      本地工具安装脚本
+scripts/      本地工具脚本
 ```
 
-## 当前限制
+## Current Limits
 
-- 仅支持 9:16 竖屏视频。
+- 当前默认生成中文视频，英文 TikTok / YouTube Shorts 输出在后续计划中。
 - Web UI 只支持公开 GitHub 仓库 URL。
-- 当前不自动运行用户项目截图，避免依赖安装、端口、数据库和 API key 让 MVP 不稳定。
-- Verifier 是辅助校验，不保证完全替代人工审查；发布前建议查看 `verification-report.md` 和最终视频。
+- 当前不自动运行目标项目截图，避免依赖、端口、数据库和 API key 让 MVP 不稳定。
+- Verifier 是辅助校验，发布前仍建议人工检查最终视频和 `verification-report.md`。
 
 ## Roadmap
 
+- 英文输出 profile：TikTok / YouTube Shorts 风格的 hook、字幕和 TTS。
 - 更丰富的 scene 模板：README 滚动、代码聚焦、架构图、结果画面。
 - 更精确的字幕 timing：接入支持 word boundary 的 TTS。
 - 更强的证据链：claim 级定位、自动降级改写。
-- 更完整的 Web 编辑体验：任务历史、渲染队列、失败恢复和下载页。
+- 更完整的 Web 工作流：任务历史、渲染队列、失败恢复和下载页。
+
+## License
+
+MIT

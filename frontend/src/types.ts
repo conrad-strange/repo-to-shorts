@@ -1,5 +1,6 @@
 export type VideoMode = 'short_30s' | 'standard_60s' | 'technical_90s';
 export type RenderProfile = 'preview' | 'final';
+export type BrandMode = 'rs' | 'rb';
 
 export interface VisualSpec {
   layout: string;
@@ -76,6 +77,9 @@ export interface WorkflowRequest {
   video_mode: VideoMode;
   render_strategy: string;
   render_profile: RenderProfile;
+  brand_mode: BrandMode;
+  bomb_circle?: string;
+  bomb_again_count?: number;
   tts_voice?: string;
   dry_run: boolean;
   auto_repair: boolean;
@@ -107,6 +111,9 @@ export interface JobDetail {
 
 export interface RerenderPayload {
   render_profile: string;
+  brand_mode?: BrandMode;
+  bomb_circle?: string;
+  bomb_again_count?: number;
   tts_voice?: string;
   allow_unverified?: boolean;
   storyboard?: Storyboard;

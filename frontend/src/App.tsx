@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useRef, useState} from 'react';
 import {api} from './api';
-import type {JobDetail, JobEvent, ProjectItem, RenderProfile, RunDetail, Scene, Storyboard, VideoMode} from './types';
+import type {BrandMode, JobDetail, JobEvent, ProjectItem, RenderProfile, RunDetail, Scene, Storyboard, VideoMode} from './types';
 
 const videoModes: Array<{value: VideoMode; label: string; hint: string}> = [
   {value: 'short_30s', label: '30s', hint: '痛点、价值、CTA'},
@@ -20,6 +20,9 @@ const ttsVoices = [
   {value: 'zh-CN-XiaoyiNeural', label: '晓伊 · 女声活泼', hint: '更轻快'},
   {value: 'zh-CN-YunjianNeural', label: '云健 · 男声有力', hint: '冲击感更强'},
 ];
+
+const defaultShortsVoice = 'zh-CN-XiaoxiaoNeural';
+const defaultBombVoice = 'zh-CN-YunxiNeural';
 
 const progressSteps = [
   {key: 'repo', label: '读取仓库', hint: 'Clone / README / 文件扫描'},
@@ -61,7 +64,11 @@ export function App() {
   const [outputNameTouched, setOutputNameTouched] = useState(false);
   const [videoMode, setVideoMode] = useState<VideoMode>('short_30s');
   const [renderProfile, setRenderProfile] = useState<RenderProfile>('preview');
+  const [brandMode, setBrandMode] = useState<BrandMode>('rs');
+  const [bombCircle, setBombCircle] = useState('科技圈');
+  const [bombAgainCount, setBombAgainCount] = useState(1);
   const [ttsVoice, setTtsVoice] = useState('zh-CN-XiaoxiaoNeural');
+  const [ttsVoiceTouched, setTtsVoiceTouched] = useState(false);
   const [dryRun, setDryRun] = useState(false);
   const [system, setSystem] = useState<Record<string, unknown> | null>(null);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
@@ -103,6 +110,18 @@ export function App() {
     if (typeof runVoice === 'string' && runVoice) {
       setTtsVoice(runVoice);
     }
+    const runBrandMode = run?.metadata.brand_mode;
+    if (runBrandMode === 'rs' || runBrandMode === 'rb') {
+      setBrandMode(runBrandMode);
+    }
+    const runBombCircle = run?.metadata.bomb_circle;
+    if (typeof runBombCircle === 'string' && runBombCircle) {
+      setBombCircle(runBombCircle);
+    }
+    const runBombAgainCount = Number(run?.metadata.bomb_again_count);
+    if (Number.isFinite(runBombAgainCount) && runBombAgainCount >= 1) {
+      setBombAgainCount(Math.min(8, Math.max(1, Math.round(runBombAgainCount))));
+    }
   }, [run]);
 
   useEffect(() => {
@@ -123,6 +142,17 @@ export function App() {
       setProjects(payload.projects);
     } catch (error) {
       setMessage((error as Error).message);
+    }
+  }
+
+  function switchBrandMode(mode: BrandMode) {
+    setBrandMode(mode);
+    if (ttsVoiceTouched) return;
+    if (mode === 'rb' && ttsVoice === defaultShortsVoice) {
+      setTtsVoice(defaultBombVoice);
+    }
+    if (mode === 'rs' && ttsVoice === defaultBombVoice) {
+      setTtsVoice(defaultShortsVoice);
     }
   }
 
@@ -148,6 +178,9 @@ export function App() {
         video_mode: videoMode,
         render_strategy: 'remotion-primary',
         render_profile: renderProfile,
+        brand_mode: brandMode,
+        bomb_circle: bombCircle,
+        bomb_again_count: bombAgainCount,
         tts_voice: ttsVoice,
         dry_run: dryRun,
         auto_repair: true,
@@ -187,6 +220,9 @@ export function App() {
         video_mode: videoMode,
         render_strategy: 'remotion-primary',
         render_profile: renderProfile,
+        brand_mode: brandMode,
+        bomb_circle: bombCircle,
+        bomb_again_count: bombAgainCount,
         tts_voice: ttsVoice,
         dry_run: dryRun,
         auto_repair: true,
@@ -319,6 +355,9 @@ export function App() {
     try {
       const job = await api.rerenderJob(run.project_id, run.run_id, {
         render_profile: renderProfile,
+        brand_mode: brandMode,
+        bomb_circle: bombCircle,
+        bomb_again_count: bombAgainCount,
         tts_voice: ttsVoice,
         storyboard: latestStoryboard ?? undefined,
       });
@@ -418,14 +457,33 @@ export function App() {
   const repoValidation = validateRepoUrl(repoUrl);
   const outputNameValidation = validateOutputName(outputName);
 
+  const bombHookPreview = buildBombHook(bombCircle, bombAgainCount);
+
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${brandMode === 'rb' ? 'theme-bomb' : 'theme-shorts'}`}>
       <aside className="left-rail">
-        <div className="brand">
-          <span className="brand-mark">RS</span>
-          <div>
-            <h1>Repo to Shorts</h1>
-          </div>
+        <div className={`brand-switch ${brandMode === 'rb' ? 'is-bomb' : 'is-shorts'}`}>
+          <button
+            type="button"
+            className={`brand-option rs ${brandMode === 'rs' ? 'active' : ''}`}
+            onClick={() => switchBrandMode('rs')}
+            aria-pressed={brandMode === 'rs'}
+          >
+            <span className="brand-mark r2s" aria-hidden="true" />
+            <strong>R2S</strong>
+            <small>Repo to Shorts</small>
+          </button>
+          <button
+            type="button"
+            className={`brand-option rb ${brandMode === 'rb' ? 'active' : ''}`}
+            onClick={() => switchBrandMode('rb')}
+            aria-pressed={brandMode === 'rb'}
+          >
+            <span className="brand-mark bomb">R2B</span>
+            <strong>R2B</strong>
+            <small>Repo to Bombs</small>
+            <span className="hazard-icon" aria-hidden="true" />
+          </button>
         </div>
 
         <section className="panel">
@@ -473,7 +531,13 @@ export function App() {
           </div>
           <div className="section-title muted">TTS 音色</div>
           <div className="voice-row">
-            <select value={ttsVoice} onChange={(event) => setTtsVoice(event.target.value)}>
+            <select
+              value={ttsVoice}
+              onChange={(event) => {
+                setTtsVoiceTouched(true);
+                setTtsVoice(event.target.value);
+              }}
+            >
               {ttsVoices.map((voice) => (
                 <option key={voice.value} value={voice.value}>
                   {voice.label}
@@ -596,6 +660,44 @@ export function App() {
       </section>
 
       <aside className="right-rail">
+        {brandMode === 'rb' ? (
+          <section className="panel bomb-editor">
+            <div className="bomb-editor-head">
+              <div>
+                <div className="section-title">Repo to Bombs</div>
+                <p className="muted-copy">只改开场包装，项目事实仍按证据校验。</p>
+              </div>
+              <span className="bomb-badge">
+                <span className="hazard-icon" aria-hidden="true" />
+              </span>
+            </div>
+            <label>
+              什么圈
+              <input
+                value={bombCircle}
+                onChange={(event) => setBombCircle(cleanBombCircleInput(event.target.value))}
+                placeholder="科技圈"
+              />
+            </label>
+            <label>
+              “又”字数量
+              <input
+                type="number"
+                min="1"
+                max="8"
+                step="1"
+                value={bombAgainCount}
+                onChange={(event) => setBombAgainCount(clampAgainCount(Number(event.target.value)))}
+              />
+            </label>
+            <div className="bomb-hook-preview">
+              <small>开场固定为</small>
+              <strong>{bombHookPreview}</strong>
+              <small>默认 Yunxi 活泼音色，后端语速 +38%，开场约 3 秒。</small>
+            </div>
+          </section>
+        ) : null}
+
         <section className="panel editor-panel">
           <div className="section-title">当前 Scene</div>
           {selectedScene ? (
@@ -1096,6 +1198,24 @@ function validateOutputName(value: string): string {
     return '输出名只能包含字母、数字、点、下划线和短横线。';
   }
   return '';
+}
+
+function buildBombHook(circle: string, againCount: number): string {
+  return `${normalizeBombCircle(circle)}今天${'又'.repeat(clampAgainCount(againCount))}炸了！`;
+}
+
+function normalizeBombCircle(value: string): string {
+  const cleaned = cleanBombCircleInput(value).trim() || '科技圈';
+  return cleaned.endsWith('圈') ? cleaned : `${cleaned}圈`;
+}
+
+function cleanBombCircleInput(value: string): string {
+  return value.replace(/[<>{}[\]|\\^`"'，。；：\s]/g, '').slice(0, 10);
+}
+
+function clampAgainCount(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, Math.min(8, Math.round(value)));
 }
 
 function inferOutputName(repoUrl: string): string {

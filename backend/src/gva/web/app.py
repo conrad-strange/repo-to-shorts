@@ -31,6 +31,7 @@ from gva.workflow import run_render_workflow
 
 VideoMode = Literal["short_30s", "standard_60s", "technical_90s"]
 RenderProfile = Literal["draft", "preview", "final"]
+BrandMode = Literal["rs", "rb"]
 
 
 class WorkflowRequest(BaseModel):
@@ -40,6 +41,9 @@ class WorkflowRequest(BaseModel):
     video_mode: VideoMode = "short_30s"
     render_strategy: str = "remotion-primary"
     render_profile: RenderProfile = "preview"
+    brand_mode: BrandMode = "rs"
+    bomb_circle: str = "科技圈"
+    bomb_again_count: int = Field(default=1, ge=1, le=8)
     tts_voice: str | None = None
     dry_run: bool = False
     auto_repair: bool = True
@@ -59,6 +63,9 @@ class StoryboardUpdateRequest(BaseModel):
 
 class RerenderRequest(BaseModel):
     render_profile: RenderProfile | None = None
+    brand_mode: BrandMode | None = None
+    bomb_circle: str | None = None
+    bomb_again_count: int | None = Field(default=None, ge=1, le=8)
     tts_voice: str | None = None
     remotion_concurrency: int | None = Field(default=None, ge=1, le=32)
     allow_unverified: bool = False
@@ -310,6 +317,9 @@ def _settings_from_request(request: WorkflowRequest) -> Settings:
     settings.video_mode = request.video_mode
     settings.render_strategy = request.render_strategy
     settings.render_profile = request.render_profile
+    settings.brand_mode = request.brand_mode
+    settings.bomb_circle = request.bomb_circle
+    settings.bomb_again_count = request.bomb_again_count
     if request.tts_voice:
         settings.tts_voice = request.tts_voice
     settings.repair_enabled = request.auto_repair
@@ -358,6 +368,9 @@ def _rerender_payload(
     settings.video_mode = metadata.get("video_mode", settings.video_mode)
     settings.render_strategy = metadata.get("render_strategy", settings.render_strategy)
     settings.render_profile = request.render_profile or metadata.get("render_profile", "preview")
+    settings.brand_mode = request.brand_mode or metadata.get("brand_mode", settings.brand_mode)
+    settings.bomb_circle = request.bomb_circle or metadata.get("bomb_circle", settings.bomb_circle)
+    settings.bomb_again_count = request.bomb_again_count or metadata.get("bomb_again_count", settings.bomb_again_count)
     settings.tts_voice = request.tts_voice or metadata.get("tts_voice", settings.tts_voice)
     settings.remotion_concurrency = request.remotion_concurrency or metadata.get("remotion_concurrency")
 
