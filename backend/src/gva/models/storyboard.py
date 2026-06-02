@@ -13,6 +13,7 @@ SceneLayout = Literal[
     "architecture_map",
     "evidence_grid",
     "code",
+    "result_media",
     "flow",
     "stack",
     "steps",
@@ -55,8 +56,7 @@ class VisualSpec(BaseModel):
     focus_target: VisualFocusTarget = "none"
     repo_url: str | None = None
     repo_display_url: str | None = None
-    enhanced_html: str | None = None
-    enhanced_by: str | None = None
+    media_type: Literal["image", "video", "none"] = "none"
     evidence_refs: list[str] = Field(default_factory=list)
 
 

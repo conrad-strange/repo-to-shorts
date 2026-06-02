@@ -1,51 +1,73 @@
-# GitHub Video Agent
+<h1 align="center">Repo to Shorts</h1>
 
-面向 GitHub 项目的多 Agent 中文讲解视频生成器。
+<p align="center">
+  把公开 GitHub 仓库自动生成中文 9:16 竖屏项目讲解短视频。
+</p>
 
-它不是通用 AI 视频生成器，而是把一个真实代码仓库自动转成适合手机平台发布的 9:16 中文项目讲解视频：读取仓库、理解项目、生成讲稿和分镜、用 TTS 配音，最后通过 Remotion 稳定渲染成 MP4。
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white">
+  <img alt="Remotion" src="https://img.shields.io/badge/Remotion-4.x-000000?style=flat-square">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Web_UI-009688?style=flat-square&logo=fastapi&logoColor=white">
+  <img alt="Video" src="https://img.shields.io/badge/Video-9%3A16_MP4-58A6FF?style=flat-square">
+</p>
+
+---
+
+## 简介
+
+Repo to Shorts 是一个面向开源开发者的 AI 工程项目：输入一个公开 GitHub 仓库，系统会分析 README、目录结构、配置文件和核心代码，生成中文讲解稿、分镜、TTS 配音，并用 Remotion 渲染成适合手机平台发布的竖屏 MP4。
+
+它不是通用 AI 视频生成器，也不依赖 Sora / Veo / 可灵这类视频大模型。当前主线是 **LLM 内容生成 + 证据校验 + 程序化视频渲染**，优先保证文字准确、画面可控、结果可复现。
 
 ## 当前能力
 
-- 支持 GitHub 仓库 URL 或本地项目路径输入。
-- 自动扫描 README、目录结构、配置文件、入口文件和核心代码片段。
-- 使用 DeepSeek/OpenAI 兼容接口生成项目理解、中文讲稿和 storyboard。
-- 生成真实 GitHub 仓库开场截图、README 证据画面、流程图、技术栈卡片和字幕节拍。
-- 使用 Edge TTS 生成中文配音，并按音频时长调整 scene timing。
-- 使用 Remotion 输出 1080x1920、9:16 MP4。
-- 内置 Verifier Agent，检查视频文案是否有仓库证据支持，避免胡说。
-- 每次生成独立 run，并保留 `videos/latest/video.mp4` 作为最新视频快捷入口。
+<table>
+  <tr>
+    <td><strong>输入</strong></td>
+    <td>公开 GitHub 仓库 URL</td>
+  </tr>
+  <tr>
+    <td><strong>内容生成</strong></td>
+    <td>项目理解、中文讲解稿、storyboard、字幕 cue</td>
+  </tr>
+  <tr>
+    <td><strong>可靠性</strong></td>
+    <td>基于 README / 配置 / 代码证据的 Verifier 与轻量 Repair Agent</td>
+  </tr>
+  <tr>
+    <td><strong>视频渲染</strong></td>
+    <td>Remotion 9:16 竖屏视频，支持 preview / final 两档渲染</td>
+  </tr>
+  <tr>
+    <td><strong>调试界面</strong></td>
+    <td>FastAPI 托管 React UI，支持分镜编辑、TTS 音色选择、生成新版</td>
+  </tr>
+</table>
 
-## 工作流
+## 技术栈
 
 ```text
-GitHub Repo / Local Project
+GitHub URL
   -> Repo Reader
   -> Evidence Index
   -> Project Understanding Agent
   -> Script Writer Agent
   -> Storyboard Agent
-  -> Verifier Agent
-  -> TTS Timing + Captions
+  -> Verifier / Repair Agent
+  -> Edge TTS + Captions
   -> Remotion Renderer
   -> 9:16 MP4
 ```
 
-## 项目结构
+- Backend：Python、Typer、FastAPI、Pydantic、GitPython
+- LLM：默认 DeepSeek OpenAI-compatible API
+- TTS：Edge TTS，默认不需要 API key
+- Renderer：Remotion、FFmpeg
+- Web UI：React + Vite，由 FastAPI 统一托管
 
-```text
-backend/       Python CLI、workflow、agents、Pydantic models
-renderer/      Remotion 竖屏视频渲染器
-docs/          架构、MVP 状态、提示词和本地工具说明
-examples/      示例 storyboard
-outputs/       生成结果，默认被 git 忽略
-scripts/       本地工具安装脚本
-requirements.txt
-README.md
-```
+## 快速开始
 
-## 环境准备
-
-推荐使用 Conda 管理 Python 环境，Node.js 和 FFmpeg 可以使用系统安装，也可以放到 `.tools/` 后在 `.env` 中配置路径。
+### 1. 安装 Python 依赖
 
 ```powershell
 conda create -n repo-video-agent python=3.11 -y
@@ -54,30 +76,33 @@ pip install -r requirements.txt
 pip install -e backend
 ```
 
-安装 Remotion 依赖：
+### 2. 安装前端和渲染依赖
 
 ```powershell
 cd renderer
 npm install
 cd ..
+
+cd frontend
+npm install
+npm run build
+cd ..
 ```
 
-复制环境变量模板：
+> Vite 需要 Node.js 20.19+ 或 22.12+。如果系统 Node 版本较低，可以在 `.env` 中配置项目自带或本地安装的 `NODE_EXE` / `NPM_CMD`。
+
+### 3. 配置环境变量
 
 ```powershell
 copy .env.example .env
 ```
 
-至少需要配置：
+至少填写：
 
 ```text
-LLM_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your_key
 DEEPSEEK_MODEL_REASONING=deepseek-v4-pro
 DEEPSEEK_MODEL_GENERATION=deepseek-v4-flash
-
-TTS_PROVIDER=edge
-TTS_RATE=+25%
 
 NODE_EXE=D:\path\to\node.exe
 NPM_CMD=D:\path\to\npm.cmd
@@ -85,83 +110,87 @@ FFMPEG_EXE=D:\path\to\ffmpeg.exe
 CHROME_EXE=C:\Program Files\Google\Chrome\Application\chrome.exe
 ```
 
-说明：
+## 使用方式
 
-- Edge TTS 不需要 API key。
-- Chrome 用于生成真实 GitHub 仓库截图；未配置时会降级为文字开场。
-- `deepseek-v4-flash` 适合脚本和分镜生成，`deepseek-v4-pro` 适合 verifier 和复杂理解。
-
-## 快速开始
-
-从 GitHub URL 生成视频：
+### Web UI
 
 ```powershell
-conda run -n repo-video-agent gva render --repo https://github.com/conrad-strange/rag-demo --out outputs/rag-demo --no-dry-run
+conda activate repo-video-agent
+gva ui
 ```
 
-从本地项目生成视频：
-
-```powershell
-conda run -n repo-video-agent gva render --path D:\path\to\project --out outputs/my-project --no-dry-run
-```
-
-查看历史生成版本：
-
-```powershell
-conda run -n repo-video-agent gva runs --out outputs/rag-demo
-```
-
-重新评估最新版本：
-
-```powershell
-conda run -n repo-video-agent gva eval --out outputs/rag-demo --run latest
-```
-
-清理旧版本，只保留最近 3 个 run：
-
-```powershell
-conda run -n repo-video-agent gva clean --out outputs/rag-demo --keep 3
-```
-
-## 输出目录
-
-每次生成都会创建一个独立 run：
+默认打开：
 
 ```text
-outputs/rag-demo/runs/0003/
+http://127.0.0.1:7860
+```
+
+网页端默认生成 `short_30s`、`preview` 版本，适合快速编辑。确认分镜后可切换到 `final` 输出 1080x1920 MP4。
+
+### CLI
+
+```powershell
+conda run -n repo-video-agent gva render `
+  --repo https://github.com/conrad-strange/rag-demo `
+  --out outputs/rag-demo `
+  --video-mode short_30s `
+  --render-profile final `
+  --no-dry-run
+```
+
+## 输出结构
+
+每次生成都会创建独立 run：
+
+```text
+outputs/<project>/runs/0001/
   repo-summary.json
   repo-evidence-index.json
   project-insight.json
   video-script.json
+  script.md
   storyboard.json
+  storyboard.final.json
   storyboard-timed.json
   verification-report.json
   evaluation-report.json
-  logs/
+  subtitles.srt
+  subtitles.vtt
+  demo_report.md
   audio/
   assets/
-  videos/video.mp4
+  preview_frames/
+  video.mp4
 ```
 
-最新视频快捷入口：
+最终视频位置：
 
 ```text
-outputs/rag-demo/videos/latest/video.mp4
+outputs/<project>/runs/<run_id>/video.mp4
 ```
 
-`outputs/<project>/videos/` 可以删除，但它是 CLI 保留的 latest 兼容入口；删除后不会影响历史 run，下次成功渲染会重新生成。
+## 项目结构
+
+```text
+backend/      Python workflow、agents、models、CLI、FastAPI API
+frontend/     React/Vite 三栏式编辑与预览界面
+renderer/     Remotion 竖屏视频模板
+docs/         架构、输出产物、Web UI 规划
+examples/     示例 storyboard
+outputs/      本地生成结果，默认不提交
+scripts/      本地工具安装脚本
+```
 
 ## 当前限制
 
-- 目前只支持竖屏 9:16。
-- 视频风格仍以程序化模板为主，不依赖 Sora/Veo/可灵等生成式视频模型。
-- 项目运行截图暂未自动生成，避免被依赖安装、端口、数据库或 API key 卡住。
-- README 内容较弱的项目会更多依赖代码和配置文件证据，Verifier 会阻止无证据 claim 进入最终视频。
+- 仅支持 9:16 竖屏视频。
+- Web UI 只支持公开 GitHub 仓库 URL。
+- 当前不自动运行用户项目截图，避免依赖安装、端口、数据库和 API key 让 MVP 不稳定。
+- Verifier 是辅助校验，不保证完全替代人工审查；发布前建议查看 `verification-report.md` 和最终视频。
 
-## 路线图
+## Roadmap
 
-- 更细的 scene 模板：架构图、代码焦点、README 滚动截图。
-- 更精准的字幕 timing：接入支持 word boundary 的 TTS。
-- 更强的 verifier：claim 级证据定位和自动降级改写。
-- Web UI：上传仓库链接、预览分镜、对比历史视频。
-- 可选项目运行截图：在用户显式配置启动命令后生成 localhost 画面。
+- 更丰富的 scene 模板：README 滚动、代码聚焦、架构图、结果画面。
+- 更精确的字幕 timing：接入支持 word boundary 的 TTS。
+- 更强的证据链：claim 级定位、自动降级改写。
+- 更完整的 Web 编辑体验：任务历史、渲染队列、失败恢复和下载页。

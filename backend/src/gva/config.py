@@ -22,11 +22,15 @@ class Settings(BaseSettings):
     tts_provider: str = "edge"
     tts_voice: str = "zh-CN-XiaoxiaoNeural"
     tts_rate: str = "+25%"
-    scene_enhancer: str = "hyperframes-lite"
     render_strategy: str = "remotion-primary"
-    hyperframes_cmd: Optional[Path] = None
+    video_mode: str = "standard_60s"
+    render_profile: str = "final"
+    remotion_concurrency: Optional[int] = None
+    repair_enabled: bool = True
+    repair_max_attempts: int = 1
 
     renderer_dir: Path = Path("renderer")
+    frontend_dir: Path = Path("frontend")
     outputs_dir: Path = Path("outputs")
     repo_cache_dir: Path = Path(".cache/repos")
     node_exe: Optional[Path] = None

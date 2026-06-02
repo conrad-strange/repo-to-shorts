@@ -13,7 +13,6 @@ GitHub URL
 -> Storyboard Agent
 -> Edge TTS
 -> TTS timing adjustment
--> HyperFrames-lite hook enhancement
 -> Remotion render
 -> Rule-based evaluation
 ```
@@ -27,9 +26,7 @@ Using `https://github.com/conrad-strange/rag-demo`, the pipeline currently produ
 - `storyboard.json`
 - `storyboard-timed.json`
 - `audio/voice.mp3`
-- `render-assets/hyperframes/scene-001.html`
-- `logs/hyperframes-manifest.json`
-- `videos/latest/video.mp4`
+- `video.mp4`
 - `evaluation-report.json`
 - `evaluation-report.md`
 
@@ -59,8 +56,5 @@ The current video is 42.35 seconds, 1080x1920, 9:16, 30fps, with an AAC audio tr
 4. Improve TTS and audio handling.
    Replace direct MP3 byte concatenation with FFmpeg concat, add optional voice choices, and produce subtitle timing.
 
-5. Add real HyperFrames CLI integration.
-   The current `hyperframes-lite` adapter writes HTML assets that Remotion embeds. Once `HYPERFRAMES_CMD` is configured and the CLI behavior is verified, switch high-impact scenes to pre-rendered HyperFrames clips.
-
-6. Add LLM Evaluator later.
+5. Add LLM Evaluator later.
    Once visuals are mature, add an LLM evaluator for narrative quality, pacing, and style fit. It should complement the current rule-based evaluator, not replace it.

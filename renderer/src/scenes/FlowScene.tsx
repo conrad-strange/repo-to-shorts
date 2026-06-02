@@ -1,8 +1,8 @@
 import React from 'react';
-import {interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+import {Easing, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import {theme} from '../styles/theme';
 import type {Scene} from '../types';
-import {accentOf, beatTiming, getBeats, SceneShell} from './sceneKit';
+import {accentOf, beatTiming, getBeats, HighlightText, SceneShell} from './sceneKit';
 
 export const FlowScene: React.FC<{scene: Scene}> = ({scene}) => {
   const frame = useCurrentFrame();
@@ -13,79 +13,117 @@ export const FlowScene: React.FC<{scene: Scene}> = ({scene}) => {
 
   return (
     <SceneShell scene={scene} dense>
-      <div style={{display: 'grid', gap: 18}}>
-        {nodes.map((node, index) => {
-          const timing = beatTiming(frame, fps, scene.duration, index * 0.14);
-          const lineScale = interpolate(
-            frame,
-            [Math.round((index * 0.14 + 0.08) * scene.duration * fps), Math.round((index * 0.14 + 0.18) * scene.duration * fps)],
-            [0, 1],
-            {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
-          );
+      <div style={{display: 'grid', gap: 16}}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr auto 1fr',
+            gap: 14,
+            alignItems: 'center',
+            marginBottom: 6,
+          }}
+        >
+          <Endpoint label="输入" value={inputLabel(nodes)} accent={accent} />
+          <div style={{color: theme.muted, fontSize: 24}}>→</div>
+          <Endpoint label="输出" value={outputLabel(nodes)} accent={accent} />
+        </div>
 
-          return (
-            <React.Fragment key={`${node}-${index}`}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '70px 1fr',
-                  gap: 22,
-                  alignItems: 'center',
-                  opacity: timing.opacity,
-                  transform: `translateY(${timing.y}px)`,
-                }}
-              >
+        <div style={{display: 'grid', gap: 12}}>
+          {nodes.map((rawNode, index) => {
+            const node = parseNode(rawNode);
+            const timing = beatTiming(frame, fps, scene.duration, index * 0.13);
+            const active = interpolate(
+              frame,
+              [Math.round((index * 0.13 + 0.04) * scene.duration * fps), Math.round((index * 0.13 + 0.16) * scene.duration * fps)],
+              [0, 1],
+              {easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
+            );
+
+            return (
+              <div key={`${rawNode}-${index}`} style={{display: 'grid', gridTemplateColumns: '62px 1fr', gap: 18}}>
                 <div
                   style={{
-                    width: 58,
-                    height: 58,
+                    width: 52,
+                    height: 52,
                     borderRadius: 999,
-                    background: index === 0 ? accent : 'rgba(240,246,252,0.08)',
-                    border: `2px solid ${index === 0 ? accent : theme.border}`,
-                    color: index === 0 ? '#0D1117' : theme.foreground,
+                    background: active > 0.5 ? accent : 'rgba(240,246,252,0.08)',
+                    color: active > 0.5 ? '#0D1117' : theme.foreground,
+                    border: `1px solid ${active > 0.5 ? accent : theme.border}`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: 24,
-                    fontWeight: 760,
+                    fontSize: 22,
+                    fontWeight: 800,
+                    opacity: timing.opacity,
+                    transform: `translateY(${timing.y}px)`,
                   }}
                 >
                   {index + 1}
                 </div>
                 <div
                   style={{
-                    minHeight: 108,
-                    border: `1px solid ${theme.border}`,
+                    minHeight: 94,
                     borderRadius: 8,
-                    background: 'rgba(22,27,34,0.78)',
-                    display: 'flex',
+                    border: `1px solid ${active > 0.5 ? accent : theme.border}`,
+                    background: active > 0.5 ? 'rgba(88,166,255,0.13)' : 'rgba(22,27,34,0.78)',
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto',
                     alignItems: 'center',
-                    padding: '0 32px',
-                    fontSize: 36,
-                    fontWeight: 680,
-                    lineHeight: 1.16,
+                    gap: 18,
+                    padding: '18px 24px',
+                    opacity: timing.opacity,
+                    transform: `translateY(${timing.y}px) scale(${timing.scale})`,
                   }}
                 >
-                  {node}
+                  <div>
+                    <div style={{fontSize: 34, fontWeight: 760, lineHeight: 1.1}}>
+                      <HighlightText text={node.title} accent={accent} />
+                    </div>
+                    {node.note ? (
+                      <div style={{marginTop: 8, color: theme.muted, fontSize: 23, lineHeight: 1.2}}>
+                        {node.note}
+                      </div>
+                    ) : null}
+                  </div>
+                  {index < nodes.length - 1 ? (
+                    <div style={{color: accent, fontSize: 26, opacity: 0.9}}>→</div>
+                  ) : (
+                    <div style={{color: accent, fontSize: 23, fontWeight: 760}}>Done</div>
+                  )}
                 </div>
               </div>
-              {index < nodes.length - 1 ? (
-                <div
-                  style={{
-                    width: 2,
-                    height: 34,
-                    marginLeft: 28,
-                    background: accent,
-                    opacity: 0.45,
-                    transformOrigin: 'top center',
-                    transform: `scaleY(${lineScale})`,
-                  }}
-                />
-              ) : null}
-            </React.Fragment>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </SceneShell>
   );
 };
+
+const parseNode = (raw: string) => {
+  const separator = raw.includes('：') ? '：' : raw.includes(':') ? ':' : raw.includes('\n') ? '\n' : null;
+  if (!separator) {
+    return {title: raw, note: ''};
+  }
+  const [title, ...rest] = raw.split(separator);
+  return {title: title.trim(), note: rest.join(separator).trim()};
+};
+
+const inputLabel = (nodes: string[]) => parseNode(nodes[0] || '输入').title;
+const outputLabel = (nodes: string[]) => parseNode(nodes[nodes.length - 1] || '输出').title;
+
+const Endpoint: React.FC<{label: string; value: string; accent: string}> = ({label, value, accent}) => (
+  <div
+    style={{
+      borderRadius: 8,
+      border: `1px solid ${theme.border}`,
+      background: 'rgba(22,27,34,0.72)',
+      padding: '16px 18px',
+    }}
+  >
+    <div style={{fontSize: 19, color: theme.muted, marginBottom: 6}}>{label}</div>
+    <div style={{fontSize: 25, color: accent, fontWeight: 720, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+      {value}
+    </div>
+  </div>
+);

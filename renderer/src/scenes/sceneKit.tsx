@@ -1,19 +1,23 @@
 import React from 'react';
-import {AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import {resolveAccent, theme} from '../styles/theme';
 import type {MicroBeat, Scene} from '../types';
 
 export const layoutLabel: Record<string, string> = {
-  hook: '开场',
-  github_hero: 'GitHub',
-  title: '项目',
-  text: '看点',
+  hook: 'Hook',
+  github_hero: 'Repo',
+  title: 'Project',
+  text: 'Insight',
   readme_focus: 'README',
-  stack: '技术栈',
-  flow: '流程',
-  code: '代码',
-  steps: '步骤',
-  cta: '行动',
+  feature_spotlight: 'Feature',
+  architecture_map: 'Flow',
+  evidence_grid: 'Evidence',
+  stack: 'Stack',
+  flow: 'Flow',
+  code: 'Code',
+  result_media: 'Result',
+  steps: 'Usage',
+  cta: 'GitHub',
 };
 
 export const getBeats = (scene: Scene, limit = 4): MicroBeat[] => {
@@ -21,7 +25,7 @@ export const getBeats = (scene: Scene, limit = 4): MicroBeat[] => {
     return scene.visual.micro_beats.slice(0, limit);
   }
 
-  const bullets = scene.visual.bullets.length ? scene.visual.bullets : [scene.narration];
+  const bullets = scene.visual.bullets.length ? scene.visual.bullets : [scene.visual.caption || scene.visual.headline];
   return bullets.slice(0, limit).map((bullet, index) => ({
     text: bullet,
     kind: 'text',
@@ -30,23 +34,20 @@ export const getBeats = (scene: Scene, limit = 4): MicroBeat[] => {
   }));
 };
 
-export const beatTiming = (
-  frame: number,
-  fps: number,
-  duration: number,
-  startRatio: number,
-) => {
+export const beatTiming = (frame: number, fps: number, duration: number, startRatio: number) => {
   const start = Math.round(startRatio * duration * fps);
   return {
-    opacity: interpolate(frame, [start, start + 8], [0, 1], {
+    opacity: interpolate(frame, [start, start + 9], [0, 1], {
       extrapolateLeft: 'clamp',
       extrapolateRight: 'clamp',
     }),
-    y: interpolate(frame, [start, start + 10], [18, 0], {
+    y: interpolate(frame, [start, start + 12], [18, 0], {
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
       extrapolateLeft: 'clamp',
       extrapolateRight: 'clamp',
     }),
-    scale: interpolate(frame, [start, start + 10], [0.985, 1], {
+    scale: interpolate(frame, [start, start + 12], [0.985, 1], {
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
       extrapolateLeft: 'clamp',
       extrapolateRight: 'clamp',
     }),
@@ -61,12 +62,9 @@ export const SceneShell: React.FC<{
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const accent = accentOf(scene);
-  const progress = interpolate(
-    frame,
-    [0, Math.max(1, scene.duration * fps - 1)],
-    [0, 1],
-    {extrapolateRight: 'clamp'},
-  );
+  const progress = interpolate(frame, [0, Math.max(1, scene.duration * fps - 1)], [0, 1], {
+    extrapolateRight: 'clamp',
+  });
   const title = beatTiming(frame, fps, scene.duration, 0);
 
   return (
@@ -78,14 +76,14 @@ export const SceneShell: React.FC<{
         overflow: 'hidden',
       }}
     >
-      <Background accent={accent} />
+      <Background />
       <div
         style={{
           position: 'absolute',
           left: 88,
           right: 88,
-          top: 88,
-          height: 5,
+          top: 82,
+          height: 4,
           borderRadius: 999,
           background: 'rgba(240,246,252,0.08)',
         }}
@@ -100,41 +98,41 @@ export const SceneShell: React.FC<{
         />
       </div>
 
-      <div style={{position: 'absolute', left: 118, right: 88, top: 134}}>
+      <div style={{position: 'absolute', left: 104, right: 88, top: 124}}>
         <div
           style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: 12,
-            height: 44,
-            padding: '0 18px',
+            height: 42,
+            padding: '0 16px',
             border: `1px solid ${theme.border}`,
             borderRadius: 999,
             background: 'rgba(22,27,34,0.78)',
             color: theme.muted,
-            fontSize: 24,
+            fontSize: 23,
           }}
         >
           <span style={{width: 8, height: 8, borderRadius: 999, background: accent}} />
-          {layoutLabel[scene.visual.layout] || '项目'}
+          {layoutLabel[scene.visual.layout] || 'Scene'}
         </div>
         <div
           style={{
-            width: dense ? 860 : 900,
-            marginTop: dense ? 58 : 76,
-            fontSize: dense ? 66 : 76,
-            fontWeight: 760,
-            lineHeight: 1.04,
+            width: dense ? 850 : 900,
+            marginTop: dense ? 48 : 64,
+            fontSize: dense ? 62 : 72,
+            fontWeight: 780,
+            lineHeight: 1.05,
             letterSpacing: 0,
             opacity: title.opacity,
             transform: `translateY(${title.y}px) scale(${title.scale})`,
           }}
         >
-          {scene.visual.headline}
+          <HighlightText text={scene.visual.headline} accent={accent} />
         </div>
       </div>
 
-      <div style={{position: 'absolute', left: 88, right: 88, top: dense ? 560 : 620, bottom: 184}}>
+      <div style={{position: 'absolute', left: 88, right: 88, top: dense ? 520 : 590, bottom: 245}}>
         {children}
       </div>
 
@@ -148,11 +146,11 @@ export const SceneShell: React.FC<{
           justifyContent: 'space-between',
           gap: 24,
           color: theme.muted,
-          fontSize: 26,
+          fontSize: 24,
         }}
       >
         <span style={{maxWidth: 720, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
-          {scene.visual.caption || scene.narration.slice(0, 22)}
+          {normalizeCopy(scene.visual.caption || layoutLabel[scene.visual.layout] || 'Scene')}
         </span>
         <span>{Math.max(1, Math.round(scene.duration))}s</span>
       </div>
@@ -214,26 +212,15 @@ export const BeatLine: React.FC<{
 export const accentOf = (scene: Scene) => resolveAccent(scene.visual.accent_color);
 
 export const HighlightText: React.FC<{text: string; accent: string}> = ({text, accent}) => {
-  const keywords = [
-    'RAG',
-    'FAISS',
-    'DeepSeek',
-    'README',
-    'GitHub',
-    '本地',
-    '检索',
-    '论文',
-    '代码',
-    '证据',
-    '项目',
-  ];
-  const pattern = new RegExp(`(${keywords.map(escapeRegExp).join('|')})`, 'g');
-  const parts = text.split(pattern).filter(Boolean);
+  const normalizedText = normalizeCopy(text);
+  const keywords = ['RAG', 'FAISS', 'DeepSeek', 'README', 'GitHub', 'MCP', 'LLM', 'API', '本地', '检索', '代码', '证据'];
+  const pattern = new RegExp(`(${keywords.map(escapeRegExp).join('|')})`, 'gi');
+  const parts = normalizedText.split(pattern).filter(Boolean);
 
   return (
     <>
       {parts.map((part, index) =>
-        keywords.includes(part) ? (
+        keywords.some((keyword) => keyword.toLowerCase() === part.toLowerCase()) ? (
           <span key={`${part}-${index}`} style={{color: accent}}>
             {part}
           </span>
@@ -245,19 +232,19 @@ export const HighlightText: React.FC<{text: string; accent: string}> = ({text, a
   );
 };
 
+export const normalizeCopy = (value: string) => value.replace(/READNE/gi, 'README');
+
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const Background: React.FC<{accent: string}> = ({accent}) => (
-  <>
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        background:
-          `linear-gradient(90deg, ${theme.grid} 1px, transparent 1px), linear-gradient(${theme.grid} 1px, transparent 1px)`,
-        backgroundSize: '120px 120px',
-        maskImage: 'radial-gradient(circle at 48% 34%, black, transparent 74%)',
-      }}
-    />
-  </>
+const Background: React.FC = () => (
+  <div
+    style={{
+      position: 'absolute',
+      inset: 0,
+      background:
+        `linear-gradient(90deg, ${theme.grid} 1px, transparent 1px), linear-gradient(${theme.grid} 1px, transparent 1px)`,
+      backgroundSize: '120px 120px',
+      maskImage: 'radial-gradient(circle at 48% 34%, black, transparent 74%)',
+    }}
+  />
 );

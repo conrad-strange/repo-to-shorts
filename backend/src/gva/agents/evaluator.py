@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -54,7 +55,6 @@ def evaluate_output(output_dir: Path, settings: Settings) -> EvaluationReport:
     tts_manifest = _load_model(required_files["tts-manifest"], TtsManifest)
     timing_log = _load_model(required_files["timing-adjustment"], TimingAdjustmentLog)
     visual_assets_manifest = _load_json(required_files["visual-assets-manifest"])
-    hyperframes_manifest = _load_json(output_dir / "logs" / "hyperframes-manifest.json")
 
     if storyboard:
         _evaluate_storyboard(storyboard, "storyboard", issues, metrics)
@@ -97,10 +97,6 @@ def evaluate_output(output_dir: Path, settings: Settings) -> EvaluationReport:
                     suggestion="Consider generating a shorter script or allowing fewer visual beats.",
                 )
             )
-    if hyperframes_manifest:
-        metrics["scene_enhancer"] = hyperframes_manifest.get("enhancer", "unknown")
-        metrics["scene_enhancer_mode"] = hyperframes_manifest.get("mode", "unknown")
-        metrics["enhanced_scene_count"] = len(hyperframes_manifest.get("scene_assets", []))
     if visual_assets_manifest:
         screenshot = visual_assets_manifest.get("github_screenshot", {})
         metrics["github_screenshot_status"] = screenshot.get("status", "unknown")
@@ -228,6 +224,7 @@ def _evaluate_storyboard(
                     suggestion="Keep each vertical scene to at most 3 bullet points.",
                 )
             )
+        _evaluate_visual_density(scene, issues)
         if scene.duration < 2.5:
             issues.append(
                 EvaluationIssue(
@@ -245,6 +242,54 @@ def _evaluate_storyboard(
                     suggestion="Consider splitting this scene if the pacing feels slow.",
                 )
             )
+
+
+def _evaluate_visual_density(scene, issues: list[EvaluationIssue]) -> None:
+    visual_texts = [scene.visual.headline, scene.visual.caption or "", *scene.visual.bullets]
+    if scene.visual.micro_beats:
+        visual_texts.extend(beat.text for beat in scene.visual.micro_beats)
+
+    for text in visual_texts:
+        cleaned = _normalize_text(text)
+        if not cleaned:
+            continue
+        if len(cleaned) > 42:
+            issues.append(
+                EvaluationIssue(
+                    severity="medium",
+                    category="visual",
+                    message=f"{scene.id} visual text is long for mobile: {text[:48]}",
+                    suggestion="Keep visual copy keyword-like; move full explanation to narration/subtitles.",
+                )
+            )
+            break
+        narration = _normalize_text(scene.narration)
+        if len(cleaned) >= 14 and cleaned in narration:
+            issues.append(
+                EvaluationIssue(
+                    severity="low",
+                    category="visual",
+                    message=f"{scene.id} visual text repeats narration.",
+                    suggestion="Use shorter keywords on screen and let narration explain the sentence.",
+                )
+            )
+            break
+
+    if scene.visual.layout in {"stack", "feature_spotlight", "evidence_grid"}:
+        item_count = len(scene.visual.micro_beats or []) or len(scene.visual.bullets)
+        if item_count > 4:
+            issues.append(
+                EvaluationIssue(
+                    severity="medium",
+                    category="visual",
+                    message=f"{scene.id} has {item_count} visual beats; expected at most 4.",
+                    suggestion="Reduce chips/cards so the scene stays readable on mobile.",
+                )
+            )
+
+
+def _normalize_text(text: str) -> str:
+    return re.sub(r"[\s，。！？、,.!?;；:：/|]+", "", text or "")
 
 
 def _probe_video(video_path: Path, settings: Settings) -> dict[str, Any]:
@@ -266,7 +311,8 @@ def _probe_video(video_path: Path, settings: Settings) -> dict[str, Any]:
     metrics["media_probe_available"] = True
     metrics["has_audio"] = "Audio:" in output
     metrics["has_video"] = "Video:" in output
-    metrics["is_9_16"] = "1080x1920" in output and "DAR 9:16" in output
+    metrics["video_resolution"] = _parse_video_resolution(output)
+    metrics["is_9_16"] = _is_vertical_9_16(output, metrics["video_resolution"])
     metrics["duration_seconds"] = _parse_duration(output)
     metrics["media_probe_summary"] = _compact_media_summary(output)
     return metrics
@@ -300,7 +346,7 @@ def _evaluate_media_info(media_info: dict[str, Any], issues: list[EvaluationIssu
                 EvaluationIssue(
                     severity="high",
                     category="media",
-                    message="Video is not detected as 1080x1920 with 9:16 display aspect ratio.",
+                    message="Video is not detected as a 9:16 vertical render.",
                 )
             )
         duration = media_info.get("duration_seconds")
@@ -345,6 +391,23 @@ def _parse_duration(output: str) -> float | None:
         return None
 
 
+def _parse_video_resolution(output: str) -> str | None:
+    video_line = next((line for line in output.splitlines() if "Video:" in line), "")
+    match = re.search(r"(\d{3,5})x(\d{3,5})", video_line)
+    return match.group(0) if match else None
+
+
+def _is_vertical_9_16(output: str, resolution: str | None) -> bool:
+    if "DAR 9:16" in output:
+        return True
+    if not resolution:
+        return False
+    width, height = (int(part) for part in resolution.split("x", 1))
+    if height <= width:
+        return False
+    return abs((width / height) - (9 / 16)) < 0.02
+
+
 def _compact_media_summary(output: str) -> list[str]:
     return [
         line.strip()
@@ -373,10 +436,4 @@ def _write_reports(output_dir: Path, report: EvaluationReport) -> None:
 
 
 def _resolve_video_path(output_dir: Path) -> Path:
-    run_video = output_dir / "videos" / "video.mp4"
-    if run_video.exists():
-        return run_video
-    latest = output_dir / "videos" / "latest" / "video.mp4"
-    if latest.exists():
-        return latest
     return output_dir / "video.mp4"

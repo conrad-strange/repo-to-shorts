@@ -22,6 +22,11 @@ export const resolveAccent = (value?: string | null) => {
   const green = Number.parseInt(value.slice(3, 5), 16);
   const blue = Number.parseInt(value.slice(5, 7), 16);
   const luminance = red * 0.2126 + green * 0.7152 + blue * 0.0722;
+  const maxChannel = Math.max(red, green, blue);
+  const minChannel = Math.min(red, green, blue);
+  const isNeutral = maxChannel - minChannel < 32;
+  const isWarm = red > 210 && green < 165 && blue < 170;
+  const isPurple = red > 130 && blue > 170 && green < 140;
 
-  return luminance < 105 ? theme.accent : value;
+  return luminance < 105 || luminance > 235 || isNeutral || isWarm || isPurple ? theme.accent : value;
 };

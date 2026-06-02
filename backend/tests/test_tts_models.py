@@ -27,6 +27,7 @@ def test_timing_adjustment_log_model() -> None:
     assert log.adjusted_total_duration_seconds == 12
 
 
-def test_hook_visual_duration_is_capped() -> None:
-    assert _adjusted_scene_duration(scene_index=1, original_duration=3.5, audio_duration=5.17) == 4.0
+def test_timing_never_shorter_than_scene_audio() -> None:
+    assert _adjusted_scene_duration(scene_index=1, original_duration=3.5, audio_duration=5.17) == 5.32
     assert _adjusted_scene_duration(scene_index=2, original_duration=5, audio_duration=5.17) == 5.62
+    assert _adjusted_scene_duration(scene_index=4, original_duration=4.25, audio_duration=3.8, scene_layout="cta") == 3.95

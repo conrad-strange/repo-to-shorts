@@ -41,18 +41,43 @@ def render(
     render_strategy: str = typer.Option(
         "remotion-primary",
         "--render-strategy",
-        help="Visual strategy: remotion-primary or hyperframes-primary.",
+        help="Visual strategy. The current product line supports remotion-primary.",
+    ),
+    video_mode: str = typer.Option(
+        "standard_60s",
+        "--video-mode",
+        help="Planned pacing mode: short_30s, standard_60s, or technical_90s.",
+    ),
+    render_profile: str = typer.Option(
+        "final",
+        "--render-profile",
+        help="Render size profile: draft, preview, or final. CLI defaults to final.",
+    ),
+    remotion_concurrency: Optional[int] = typer.Option(
+        None,
+        "--remotion-concurrency",
+        min=1,
+        help="Optional Remotion frame-rendering concurrency override.",
     ),
     allow_unverified: bool = typer.Option(
         False,
         "--allow-unverified",
         help="Continue after high-severity verifier findings. Intended for debugging only.",
     ),
+    auto_repair: bool = typer.Option(
+        True,
+        "--auto-repair/--no-auto-repair",
+        help="Automatically ask the Repair Agent to rewrite unsupported claims once before stopping.",
+    ),
     run_id: Optional[str] = typer.Option(None, "--run-id", help="Optional explicit run id, such as 0003."),
 ) -> None:
     """Run the MVP repo-to-storyboard workflow."""
     settings = Settings()
     settings.render_strategy = render_strategy
+    settings.video_mode = video_mode
+    settings.render_profile = render_profile
+    settings.remotion_concurrency = remotion_concurrency
+    settings.repair_enabled = auto_repair
     result = run_render_workflow(
         project_path=path,
         repo_url=repo,
@@ -71,12 +96,14 @@ def render(
     console.print("[green]Workflow completed.[/green]")
     console.print(f"Run id: [bold]{result.metadata.get('run_id', 'unknown')}[/bold]")
     console.print(f"Run directory: [bold]{result.output_dir}[/bold]")
-    if result.metadata.get("latest_video_path"):
-        console.print(f"Latest video: [bold]{result.metadata['latest_video_path']}[/bold]")
+    if result.metadata.get("video_path"):
+        console.print(f"Video: [bold]{result.metadata['video_path']}[/bold]")
     if result.metadata.get("verification_passed") is not None:
         console.print(f"Verifier passed: [bold]{result.metadata['verification_passed']}[/bold]")
     if result.metadata.get("evaluation_score") is not None:
         console.print(f"Evaluation score: [bold]{result.metadata['evaluation_score']}[/bold]")
+    if result.metadata.get("demo_report_path"):
+        console.print(f"Demo report: [bold]{result.metadata['demo_report_path']}[/bold]")
     if result.metadata.get("next_step_requires"):
         console.print(f"[yellow]Next step requires: {result.metadata['next_step_requires']}[/yellow]")
 
@@ -118,6 +145,28 @@ def clean_command(
     console.print(f"Removed {len(removed)} run(s).")
     for path in removed:
         console.print(str(path))
+
+
+@app.command("ui")
+def ui_command(
+    host: str = typer.Option("127.0.0.1", "--host", help="Local host for the web UI."),
+    port: int = typer.Option(7860, "--port", min=1, max=65535, help="Local port for the web UI."),
+    rebuild_frontend: bool = typer.Option(
+        False,
+        "--rebuild-frontend",
+        help="Rebuild the bundled React UI before starting.",
+    ),
+    open_browser: bool = typer.Option(
+        True,
+        "--open-browser/--no-open-browser",
+        help="Open the local UI in the default browser.",
+    ),
+) -> None:
+    """Start the single-command local web UI."""
+    from gva.web.app import main as run_web_ui
+
+    console.print(f"[green]Starting Repo to Shorts UI on http://{host}:{port}[/green]")
+    run_web_ui(host=host, port=port, rebuild_frontend=rebuild_frontend, open_browser=open_browser)
 
 
 if __name__ == "__main__":

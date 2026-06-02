@@ -19,6 +19,7 @@ SETUP_RE = re.compile(
     re.IGNORECASE,
 )
 HYPE_RE = re.compile(r"(颠覆|史上最强|全自动企业级|无所不能|完全替代|零成本|最先进)")
+AUDIENCE_RE = re.compile(r"(适合|面向|专门.*(研究者|学生|开发者|用户)|为.*(研究者|学生|开发者|用户).*设计)")
 
 
 def verify_video_plan(
@@ -176,7 +177,7 @@ def _llm_claim_checks(
             "id": item.id,
             "source_path": item.source_path,
             "role": item.role,
-            "excerpt": item.excerpt[:700],
+            "excerpt": item.excerpt[:1600],
             "derived_facts": item.derived_facts,
         }
         for item in ordered_items[:28]
@@ -184,6 +185,8 @@ def _llm_claim_checks(
     prompt = (
         "You are a strict verifier for a Chinese GitHub project explainer video. "
         "Only mark a claim supported if it is directly supported by the evidence excerpts. "
+        "Simple calls to action such as viewing the repository, reading README, cloning, or starring "
+        "are marketing CTAs and should not be marked high severity just because the repo did not ask for them. "
         "Return JSON with a `claims` array. Each item must contain id, status "
         "(supported|weak|unsupported), severity (low|medium|high), and reason. "
         "Unsupported factual project capabilities should be high severity."
@@ -237,6 +240,14 @@ def _llm_claim_checks(
             status = "weak"
         if severity not in {"low", "medium", "high"}:
             severity = "medium"
+        reason = str(raw.get("reason", ""))[:500]
+        status, severity, reason = _soften_llm_verdict(
+            text=text,
+            evidence_refs=scene.evidence_refs if scene else [],
+            status=status,
+            severity=severity,
+            reason=reason,
+        )
         checks.append(
             ClaimCheck(
                 id=claim_id,
@@ -245,10 +256,26 @@ def _llm_claim_checks(
                 evidence_refs=scene.evidence_refs if scene else [],
                 status=status,
                 severity=severity,
-                reason=str(raw.get("reason", ""))[:500] or "LLM verifier did not provide a reason.",
+                reason=reason or "LLM verifier did not provide a reason.",
             )
         )
     return checks
+
+
+def _soften_llm_verdict(
+    text: str,
+    evidence_refs: list[str],
+    status: str,
+    severity: str,
+    reason: str,
+) -> tuple[str, str, str]:
+    if status == "unsupported" and severity == "high" and evidence_refs and AUDIENCE_RE.search(text):
+        return (
+            "weak",
+            "medium",
+            (reason + " Audience framing is treated as editable positioning, not a blocking capability claim.").strip(),
+        )
+    return status, severity, reason
 
 
 def _has_key(settings: Settings) -> bool:

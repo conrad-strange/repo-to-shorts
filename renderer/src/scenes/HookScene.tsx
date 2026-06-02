@@ -8,6 +8,7 @@ export const HookScene: React.FC<{scene: Scene}> = ({scene}) => {
   const opacity = interpolate(frame, [0, 8], [0, 1], {extrapolateRight: 'clamp'});
   const y = interpolate(frame, [0, 10], [18, 0], {extrapolateRight: 'clamp'});
   const accent = resolveAccent(scene.visual.accent_color);
+  const headlineSize = hookHeadlineSize(scene.visual.headline);
 
   return (
     <AbsoluteFill
@@ -27,7 +28,16 @@ export const HookScene: React.FC<{scene: Scene}> = ({scene}) => {
           paddingLeft: 34,
         }}
       >
-        <div style={{fontSize: 86, fontWeight: 760, lineHeight: 1.04, letterSpacing: 0}}>
+        <div
+          style={{
+            fontSize: headlineSize,
+            fontWeight: 760,
+            lineHeight: 1.04,
+            letterSpacing: 0,
+            overflowWrap: 'break-word',
+            wordBreak: 'break-word',
+          }}
+        >
           {scene.visual.headline}
         </div>
         <div style={{height: 28}} />
@@ -39,4 +49,11 @@ export const HookScene: React.FC<{scene: Scene}> = ({scene}) => {
       </div>
     </AbsoluteFill>
   );
+};
+
+const hookHeadlineSize = (text: string) => {
+  const length = Array.from(text || '').length;
+  if (length > 24) return 62;
+  if (length > 16) return 72;
+  return 86;
 };

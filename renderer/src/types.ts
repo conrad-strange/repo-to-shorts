@@ -8,6 +8,7 @@ export type SceneLayout =
   | 'architecture_map'
   | 'evidence_grid'
   | 'code'
+  | 'result_media'
   | 'flow'
   | 'stack'
   | 'steps'
@@ -40,8 +41,7 @@ export interface VisualSpec {
   focus_target?: VisualFocusTarget;
   repo_url?: string | null;
   repo_display_url?: string | null;
-  enhanced_html?: string | null;
-  enhanced_by?: string | null;
+  media_type?: 'image' | 'video' | 'none';
   evidence_refs?: string[];
 }
 

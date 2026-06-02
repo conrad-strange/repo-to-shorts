@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 
@@ -33,21 +32,6 @@ def list_run_ids(root_output_dir: Path) -> list[str]:
     if not runs_dir.exists():
         return []
     return sorted(path.name for path in runs_dir.iterdir() if path.is_dir())
-
-
-def publish_latest_video(run_dir: Path, root_output_dir: Path, video_path: Path) -> Path:
-    latest_dir = root_output_dir / "videos" / "latest"
-    latest_dir.mkdir(parents=True, exist_ok=True)
-    latest_path = latest_dir / "video.mp4"
-    shutil.copyfile(video_path, latest_path)
-    manifest = {
-        "run_id": run_dir.name,
-        "run_dir": str(run_dir),
-        "source_video": str(video_path),
-        "latest_video": str(latest_path),
-    }
-    (latest_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    return latest_path
 
 
 def clean_old_runs(root_output_dir: Path, keep: int) -> list[Path]:

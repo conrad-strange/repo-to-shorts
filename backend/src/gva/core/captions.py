@@ -31,6 +31,8 @@ def attach_caption_cues(storyboard: Storyboard, output_dir: Path) -> Storyboard:
         json.dumps(manifest, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    (output_dir / "subtitles.srt").write_text(_render_srt(enhanced), encoding="utf-8")
+    (output_dir / "subtitles.vtt").write_text(_render_vtt(enhanced), encoding="utf-8")
     return enhanced
 
 
@@ -65,7 +67,7 @@ def _scene_cues(scene_id: str, narration: str, duration: float) -> list[CaptionC
 
 
 def _split_narration(text: str) -> list[str]:
-    text = re.sub(r"\s+", "", text.strip())
+    text = re.sub(r"\s+", " ", text.strip())
     if not text:
         return []
     rough = [part for part in re.split(r"(?<=[。！？!?；;])", text) if part]
@@ -95,3 +97,43 @@ def _keywords(text: str) -> list[str]:
         canonical = "GitHub" if value.lower() == "github" else value
         found.append(canonical)
     return list(dict.fromkeys(found))
+
+
+def _render_srt(storyboard: Storyboard) -> str:
+    lines: list[str] = []
+    index = 1
+    for scene in storyboard.scenes:
+        for cue in scene.captions:
+            start = scene.start + cue.start
+            end = scene.start + cue.end
+            lines.extend(
+                [
+                    str(index),
+                    f"{_srt_time(start)} --> {_srt_time(end)}",
+                    cue.text,
+                    "",
+                ]
+            )
+            index += 1
+    return "\n".join(lines)
+
+
+def _render_vtt(storyboard: Storyboard) -> str:
+    lines = ["WEBVTT", ""]
+    for scene in storyboard.scenes:
+        for cue in scene.captions:
+            start = scene.start + cue.start
+            end = scene.start + cue.end
+            lines.extend([f"{_vtt_time(start)} --> {_vtt_time(end)}", cue.text, ""])
+    return "\n".join(lines)
+
+
+def _srt_time(seconds: float) -> str:
+    hours, remainder = divmod(max(seconds, 0), 3600)
+    minutes, secs = divmod(remainder, 60)
+    millis = int(round((secs - int(secs)) * 1000))
+    return f"{int(hours):02d}:{int(minutes):02d}:{int(secs):02d},{millis:03d}"
+
+
+def _vtt_time(seconds: float) -> str:
+    return _srt_time(seconds).replace(",", ".")

@@ -18,7 +18,7 @@ def write_script(insight: ProjectInsight, settings: Settings) -> VideoScript:
     prompt = PROMPT_PATH.read_text(encoding="utf-8")
     messages = [
         {"role": "system", "content": prompt},
-        {"role": "user", "content": _build_insight_input(insight)},
+        {"role": "user", "content": _build_insight_input(insight, settings)},
     ]
     model = get_generation_model(settings)
     try:
@@ -68,5 +68,20 @@ def render_script_markdown(script: VideoScript) -> str:
     return "\n".join(lines)
 
 
-def _build_insight_input(insight: ProjectInsight) -> str:
-    return json.dumps(insight.model_dump(), ensure_ascii=False)
+def _build_insight_input(insight: ProjectInsight, settings: Settings) -> str:
+    return json.dumps(
+        {
+            "video_mode": settings.video_mode,
+            "mode_notes": _mode_notes(settings.video_mode),
+            "project_insight": insight.model_dump(),
+        },
+        ensure_ascii=False,
+    )
+
+
+def _mode_notes(video_mode: str) -> str:
+    if video_mode == "short_30s":
+        return "Aim for 30-40 seconds: pain point, what it does, one core highlight, GitHub CTA."
+    if video_mode == "technical_90s":
+        return "Aim for 75-90 seconds: include architecture, usage, and one concise code or implementation detail scene."
+    return "Aim for 45-60 seconds: hook, project value, core flow, highlights, usage/CTA."

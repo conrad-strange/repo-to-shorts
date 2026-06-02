@@ -3,8 +3,9 @@ from pathlib import Path
 from gva.agents.verifier import verify_video_plan
 from gva.config import Settings
 from gva.core.captions import attach_caption_cues
+from gva.core.demo_report import generate_demo_assets
 from gva.core.evidence import build_evidence_index
-from gva.core.runs import allocate_run, list_run_ids, publish_latest_video, resolve_run_dir
+from gva.core.runs import allocate_run, list_run_ids, resolve_run_dir
 from gva.models.insight import ProjectInsight
 from gva.models.repo import RepoFile, RepoSummary
 from gva.models.script import ScriptSegment, VideoScript
@@ -75,6 +76,8 @@ def test_caption_cues_stay_inside_scene_duration(tmp_path: Path) -> None:
     assert timed.scenes[0].captions
     assert timed.scenes[0].captions[-1].end == 4.0
     assert (tmp_path / "logs" / "caption-cues.json").exists()
+    assert (tmp_path / "subtitles.srt").exists()
+    assert (tmp_path / "subtitles.vtt").exists()
 
 
 def test_verifier_blocks_install_commands(tmp_path: Path) -> None:
@@ -113,17 +116,28 @@ def test_verifier_blocks_install_commands(tmp_path: Path) -> None:
     assert (tmp_path / "verification-report.json").exists()
 
 
-def test_versioned_runs_and_latest_video(tmp_path: Path) -> None:
+def test_versioned_runs_resolve_latest_run(tmp_path: Path) -> None:
     first = allocate_run(tmp_path)
     second = allocate_run(tmp_path)
-    video = second.run_dir / "videos" / "video.mp4"
-    video.parent.mkdir(parents=True)
+    video = second.run_dir / "video.mp4"
     video.write_bytes(b"fake mp4")
-
-    latest = publish_latest_video(second.run_dir, tmp_path, video)
 
     assert first.run_id == "0001"
     assert second.run_id == "0002"
     assert list_run_ids(tmp_path) == ["0001", "0002"]
     assert resolve_run_dir(tmp_path, "latest") == second.run_dir
-    assert latest.exists()
+    assert video.exists()
+
+
+def test_demo_report_is_written_without_video(tmp_path: Path) -> None:
+    settings = Settings(ffmpeg_exe=tmp_path / "missing-ffmpeg.exe")
+
+    assets = generate_demo_assets(
+        output_dir=tmp_path,
+        settings=settings,
+        metadata={"repo_url": "https://github.com/example/demo", "run_id": "0001"},
+    )
+
+    assert assets["demo_report"].endswith("demo_report.md")
+    assert (tmp_path / "demo_report.md").exists()
+    assert (tmp_path / "logs" / "demo-assets.json").exists()

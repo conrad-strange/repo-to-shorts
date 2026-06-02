@@ -11,7 +11,7 @@ Each run writes useful intermediate artifacts so generation errors can be traced
 - `storyboard.json`: LLM-generated visual storyboard before TTS timing.
 - `storyboard-timed.json`: storyboard adjusted from measured TTS audio duration.
 - `workflow-metadata.json`: high-level run metadata and next pipeline step.
-- `videos/latest/video.mp4`: latest rendered vertical video.
+- `video.mp4`: rendered vertical video for this immutable run.
 
 ## Logs
 
@@ -28,19 +28,19 @@ The current MVP combines scene MP3 files directly. A later render phase should p
 
 ## Video Versioning
 
-The current CLI writes the newest rendered video to:
+The current CLI writes each rendered video into its run folder:
 
 ```text
-outputs/<project>/videos/latest/video.mp4
+outputs/<project>/runs/<run_id>/video.mp4
 ```
 
-For a future web UI, keep `latest` as a convenience pointer and create immutable run folders:
+Run folders are immutable by default so users can compare versions:
 
 ```text
-outputs/<project>/videos/
-  latest/
-  20260530-183910-short/
-  20260530-190205-style-test/
+outputs/<project>/runs/
+  0001/
+    video.mp4
+  0002/
+    video.mp4
 ```
-
-Each run folder should eventually contain its own `video.mp4`, preview image, render metadata, and evaluation report so users can compare versions instead of overwriting history.
+Each run folder should contain its own `video.mp4`, preview image, render metadata, and evaluation report.

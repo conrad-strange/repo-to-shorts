@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 from pathlib import Path
 
 import edge_tts
@@ -57,6 +58,7 @@ def run_tts_timing(
             scene_index=index,
             original_duration=scene.duration,
             audio_duration=audio_duration,
+            scene_layout=scene.visual.layout,
         )
         scene_audio_items.append(
             TtsSceneAudio(
@@ -71,6 +73,9 @@ def run_tts_timing(
 
     full_audio_path = output_dir / "audio" / "voice.mp3"
     _concat_mp3_bytes([item.audio_path for item in scene_audio_items], full_audio_path)
+    normalized_audio_path = output_dir / "audio" / "voice-normalized.mp3"
+    if _normalize_audio(full_audio_path, normalized_audio_path, settings.ffmpeg_exe):
+        full_audio_path = normalized_audio_path
     full_audio_duration = _audio_duration(full_audio_path)
 
     timed_storyboard = storyboard.model_copy(deep=True)
@@ -107,7 +112,7 @@ def run_tts_timing(
         tts_manifest_path=manifest_path,
         original_total_duration_seconds=round(sum(scene.duration for scene in storyboard.scenes), 2),
         adjusted_total_duration_seconds=round(sum(scene.duration for scene in timed_storyboard.scenes), 2),
-        method="scene_audio_duration_plus_0.45s_padding_hook_visual_capped_at_4s",
+        method="scene_audio_duration_plus_scene_padding_never_shorter_than_audio",
     )
     adjustment_path = logs_dir / "timing-adjustment.json"
     adjustment_path.write_text(
@@ -118,10 +123,16 @@ def run_tts_timing(
     return timed_storyboard, manifest, adjustment_log
 
 
-def _adjusted_scene_duration(scene_index: int, original_duration: float, audio_duration: float) -> float:
-    adjusted = max(audio_duration + 0.45, 2.5)
-    if scene_index == 1 and original_duration <= 4:
-        adjusted = min(max(audio_duration + 0.15, 2.5), 4.0)
+def _adjusted_scene_duration(
+    scene_index: int,
+    original_duration: float,
+    audio_duration: float,
+    scene_layout: str | None = None,
+) -> float:
+    padding = 0.15 if scene_index == 1 or scene_layout == "cta" else 0.45
+    adjusted = max(audio_duration + padding, 2.5)
+    if scene_index == 1 and original_duration <= 4 and audio_duration + padding <= 4:
+        adjusted = min(adjusted, 4.0)
     return round(adjusted, 2)
 
 
@@ -148,3 +159,21 @@ def _concat_mp3_bytes(parts: list[Path], output_path: Path) -> None:
     with output_path.open("wb") as output:
         for part in parts:
             output.write(part.read_bytes())
+
+
+def _normalize_audio(input_path: Path, output_path: Path, ffmpeg: Path | None) -> bool:
+    if ffmpeg is None or not ffmpeg.exists() or output_path.exists():
+        return output_path.exists()
+    command = [
+        str(ffmpeg),
+        "-y",
+        "-i",
+        str(input_path),
+        "-af",
+        "loudnorm=I=-16:TP=-1.5:LRA=11",
+        "-ar",
+        "48000",
+        str(output_path),
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+    return result.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0

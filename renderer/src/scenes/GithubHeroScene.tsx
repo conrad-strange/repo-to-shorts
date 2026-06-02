@@ -1,5 +1,5 @@
 import React from 'react';
-import {AbsoluteFill, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
+import {AbsoluteFill, Easing, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
 import {resolveAccent, theme} from '../styles/theme';
 import type {Scene} from '../types';
 import {HighlightText} from './sceneKit';
@@ -10,21 +10,20 @@ export const GithubHeroScene: React.FC<{scene: Scene}> = ({scene}) => {
   const accent = resolveAccent(scene.visual.accent_color);
   const asset = scene.visual.asset_path;
   const repoUrl = scene.visual.repo_display_url || scene.visual.repo_url || 'github.com/repository';
-  const total = Math.max(1, scene.duration * fps);
-  const screenshotOpacity = interpolate(frame, [0, 12], [0, 1], {extrapolateRight: 'clamp'});
-  const zoom = spring({frame: frame - 10, fps, config: {damping: 22, stiffness: 68, mass: 0.9}});
-  const screenshotScale = interpolate(zoom, [0, 1], [0.78, 1.62], {extrapolateRight: 'clamp'});
-  const screenshotX = interpolate(zoom, [0, 1], [0, 260], {extrapolateRight: 'clamp'});
-  const screenshotY = interpolate(zoom, [0, 1], [230, -28], {extrapolateRight: 'clamp'});
-  const titleOpacity = interpolate(frame, [3, 15], [0, 1], {extrapolateRight: 'clamp'});
-  const titleY = interpolate(frame, [3, 16], [30, 0], {extrapolateRight: 'clamp'});
-  const frameY = interpolate(frame, [0, 18], [34, 0], {extrapolateRight: 'clamp'});
-  const hudOpacity = interpolate(frame, [20, 34], [0, 1], {extrapolateRight: 'clamp'});
-  const focusOpacity = interpolate(frame, [28, 44], [0, 1], {extrapolateRight: 'clamp'});
+  const repoHandle = compactRepoHandle(repoUrl);
+  const beats = (scene.visual.micro_beats || []).slice(0, 3);
+  const headlineSize = heroHeadlineSize(scene.visual.headline);
 
-  if (!asset) {
-    return <FallbackHook scene={scene} accent={accent} />;
-  }
+  const titleIn = spring({frame: frame - 3, fps, config: {damping: 22, stiffness: 90}});
+  const cardIn = interpolate(frame, [14, 32], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  const screenshotIn = interpolate(frame, [4, 28], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
 
   return (
     <AbsoluteFill
@@ -35,9 +34,26 @@ export const GithubHeroScene: React.FC<{scene: Scene}> = ({scene}) => {
         overflow: 'hidden',
       }}
     >
-      <GridBackground accent={accent} />
+      <GridBackground />
+      {asset ? (
+        <img
+          src={staticFile(asset)}
+          style={{
+            position: 'absolute',
+            left: -130,
+            top: 360,
+            width: 1340,
+            height: 940,
+            objectFit: 'cover',
+            objectPosition: '50% 0%',
+            opacity: 0.22 * screenshotIn,
+            filter: 'blur(1.6px) brightness(0.58) saturate(0.9)',
+            transform: `scale(${1.03 + screenshotIn * 0.05})`,
+          }}
+        />
+      ) : null}
 
-      <div style={{position: 'absolute', left: 74, right: 74, top: 96}}>
+      <div style={{position: 'absolute', left: 76, right: 76, top: 86}}>
         <div
           style={{
             display: 'flex',
@@ -49,21 +65,24 @@ export const GithubHeroScene: React.FC<{scene: Scene}> = ({scene}) => {
         >
           <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
             <RepoGlyph accent={accent} />
-            <span>GitHub 项目详解</span>
+            <span>GitHub 项目讲解</span>
           </div>
           <span>9:16 Repo Story</span>
         </div>
 
         <div
           style={{
-            marginTop: 54,
-            width: 900,
-            fontSize: 88,
-            fontWeight: 780,
+            marginTop: 52,
+            width: '100%',
+            maxWidth: 900,
+            fontSize: headlineSize,
+            fontWeight: 800,
             lineHeight: 1.02,
             letterSpacing: 0,
-            opacity: titleOpacity,
-            transform: `translateY(${titleY}px)`,
+            overflowWrap: 'break-word',
+            wordBreak: 'break-word',
+            opacity: titleIn,
+            transform: `translateY(${interpolate(titleIn, [0, 1], [26, 0])}px)`,
           }}
         >
           <HighlightText text={scene.visual.headline} accent={accent} />
@@ -73,244 +92,145 @@ export const GithubHeroScene: React.FC<{scene: Scene}> = ({scene}) => {
       <div
         style={{
           position: 'absolute',
-          left: 64,
-          right: 64,
-          top: 466,
-          height: 958,
+          left: 72,
+          right: 72,
+          top: 650,
           borderRadius: 8,
-          overflow: 'hidden',
           border: `1px solid ${theme.border}`,
-          background: theme.panel,
-          boxShadow: `0 38px 100px ${theme.shadow}`,
-          opacity: screenshotOpacity,
-          transform: `translateY(${frameY}px)`,
+          background: 'rgba(22,27,34,0.9)',
+          boxShadow: `0 36px 100px ${theme.shadow}`,
+          padding: '30px 34px',
+          opacity: cardIn,
+          transform: `translateY(${interpolate(cardIn, [0, 1], [32, 0])}px)`,
         }}
       >
-        <BrowserBar accent={accent} repoUrl={repoUrl} />
-        <img
-          src={staticFile(asset)}
-          style={{
-            width: '100%',
-            height: 'calc(100% - 56px)',
-            display: 'block',
-            position: 'relative',
-            zIndex: 1,
-            objectFit: 'cover',
-            objectPosition: '50% 0%',
-            transform: `translate(${screenshotX}px, ${screenshotY}px) scale(${screenshotScale})`,
-            transformOrigin: '18% 10%',
-          }}
-        />
+        <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20}}>
+          <div style={{fontSize: 24, color: theme.muted}}>Repository</div>
+          <div style={{fontSize: 20, color: theme.muted}}>{repoUrl}</div>
+        </div>
         <div
           style={{
-            position: 'absolute',
-            left: 178,
-            top: 72,
-            width: 474,
-            height: 68,
-            zIndex: 3,
-            borderRadius: 8,
-            border: `2px solid ${accent}`,
-            boxShadow: `0 0 0 999px rgba(13,17,23,${0.52 * focusOpacity})`,
-            opacity: focusOpacity,
+            marginTop: 14,
+            fontSize: 46,
+            lineHeight: 1.1,
+            fontWeight: 780,
+            fontFamily: 'SFMono-Regular, Consolas, monospace',
+            wordBreak: 'break-word',
           }}
-        />
+        >
+          {repoHandle}
+        </div>
+
+        <div style={{marginTop: 24, display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 18}}>
+          <div
+            style={{
+              borderRadius: 8,
+              border: `1px solid ${theme.border}`,
+              background: 'rgba(13,17,23,0.72)',
+              padding: '22px 24px',
+            }}
+          >
+            <div style={{fontSize: 21, color: theme.muted, marginBottom: 10}}>Core promise</div>
+            <div style={{fontSize: 32, fontWeight: 700, lineHeight: 1.22}}>
+              <HighlightText text={scene.visual.caption || '快速看懂项目价值'} accent={accent} />
+            </div>
+          </div>
+          <div style={{display: 'grid', gap: 10}}>
+            {(beats.length ? beats : fallbackBeats(scene)).map((beat, index) => (
+              <SignalChip key={`${beat.text}-${index}`} label={beat.text} accent={accent} active={index === 0} />
+            ))}
+          </div>
+        </div>
       </div>
 
       <div
         style={{
           position: 'absolute',
-          left: 86,
-          right: 86,
-          bottom: 92,
-          display: 'grid',
-          gridTemplateColumns: '1fr 304px',
-          gap: 20,
-          opacity: hudOpacity,
+          left: 96,
+          right: 96,
+          bottom: 90,
+          height: 64,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          color: theme.muted,
+          fontSize: 24,
         }}
       >
-        <div
-          style={{
-            borderRadius: 8,
-            border: `1px solid ${theme.border}`,
-            background: 'rgba(22,27,34,0.92)',
-            padding: '28px 32px',
-            boxShadow: `0 24px 70px ${theme.shadow}`,
-          }}
-        >
-          <div style={{color: theme.muted, fontSize: 22, marginBottom: 10}}>
-            {scene.visual.caption || '真实仓库界面'}
-          </div>
-          <div style={{fontSize: 34, fontWeight: 680, lineHeight: 1.24}}>
-            {scene.narration}
-          </div>
-        </div>
-
-        <div style={{display: 'grid', gap: 10}}>
-          <SignalChip icon="repo" label="Repo" accent={accent} />
-          <SignalChip icon="readme" label="README" accent={accent} />
-          <SignalChip icon="code" label="Code" accent={accent} />
-        </div>
+        <span>README / Code / Evidence</span>
+        <span style={{color: accent}}>开源仓库</span>
       </div>
     </AbsoluteFill>
   );
 };
 
-const BrowserBar: React.FC<{accent: string; repoUrl: string}> = ({accent, repoUrl}) => (
-  <div
-    style={{
-      height: 56,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 14,
-      padding: '0 18px',
-      borderBottom: `1px solid ${theme.border}`,
-      background: theme.panelElevated,
-      position: 'relative',
-      zIndex: 4,
-    }}
-  >
-    <span style={{width: 10, height: 10, borderRadius: 999, background: '#FF5F57'}} />
-    <span style={{width: 10, height: 10, borderRadius: 999, background: '#FFBD2E'}} />
-    <span style={{width: 10, height: 10, borderRadius: 999, background: '#28C840'}} />
-    <div
-      style={{
-        marginLeft: 12,
-        height: 30,
-        flex: 1,
-        borderRadius: 8,
-        border: `1px solid ${theme.border}`,
-        background: 'rgba(13,17,23,0.72)',
-        color: theme.muted,
-        fontSize: 18,
-        display: 'flex',
-        alignItems: 'center',
-        paddingLeft: 14,
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-      }}
-    >
-      {repoUrl}
-    </div>
-    <RepoGlyph accent={accent} small />
-  </div>
-);
+const fallbackBeats = (scene: Scene) =>
+  (scene.visual.bullets.length ? scene.visual.bullets : ['README', '核心文件', '项目标签']).slice(0, 3).map((text) => ({
+    text,
+  }));
 
-const SignalChip: React.FC<{icon: 'repo' | 'readme' | 'code'; label: string; accent: string}> = ({
-  icon,
-  label,
-  accent,
-}) => (
+const compactRepoHandle = (value?: string | null) =>
+  (value || '')
+    .replace(/^https?:\/\/github\.com\//i, '')
+    .replace(/^github\.com\//i, '')
+    .replace(/\.git$/i, '')
+    .trim() || 'owner/repo';
+
+const heroHeadlineSize = (text: string) => {
+  const length = Array.from(text || '').length;
+  if (length > 22) return 68;
+  if (length > 16) return 76;
+  if (length > 11) return 84;
+  return 92;
+};
+
+const SignalChip: React.FC<{label: string; accent: string; active?: boolean}> = ({label, accent, active = false}) => (
   <div
     style={{
-      height: 70,
+      height: 64,
       borderRadius: 8,
-      border: `1px solid ${theme.border}`,
-      background: 'rgba(22,27,34,0.86)',
+      border: `1px solid ${active ? accent : theme.border}`,
+      background: active ? 'rgba(88,166,255,0.16)' : 'rgba(240,246,252,0.06)',
       display: 'flex',
       alignItems: 'center',
-      gap: 16,
-      padding: '0 18px',
+      gap: 12,
+      padding: '0 16px',
       color: theme.foreground,
       fontSize: 24,
-      fontWeight: 650,
+      fontWeight: 680,
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
     }}
   >
-    <SemanticIcon kind={icon} accent={accent} />
+    <span style={{width: 8, height: 8, borderRadius: 999, background: active ? accent : theme.muted}} />
     {label}
   </div>
 );
 
-const SemanticIcon: React.FC<{kind: 'repo' | 'readme' | 'code'; accent: string}> = ({kind, accent}) => {
-  const mark = kind === 'repo' ? 'R' : kind === 'readme' ? 'M' : '<>';
-  return (
-    <div
-      style={{
-        width: 34,
-        height: 34,
-        borderRadius: 8,
-        background: kind === 'repo' ? accent : 'rgba(240,246,252,0.08)',
-        color: kind === 'repo' ? '#0D1117' : theme.foreground,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: kind === 'code' ? 16 : 18,
-        fontWeight: 780,
-        fontFamily: kind === 'code' ? 'SFMono-Regular, Consolas, monospace' : theme.fontFamily,
-      }}
-    >
-      {mark}
-    </div>
-  );
-};
-
-const RepoGlyph: React.FC<{accent: string; small?: boolean}> = ({accent, small = false}) => (
+const RepoGlyph: React.FC<{accent: string}> = ({accent}) => (
   <div
     style={{
-      width: small ? 26 : 34,
-      height: small ? 26 : 34,
+      width: 34,
+      height: 34,
       borderRadius: 8,
       border: `2px solid ${accent}`,
       position: 'relative',
     }}
   >
-    <span
-      style={{
-        position: 'absolute',
-        left: small ? 6 : 8,
-        top: small ? 6 : 8,
-        width: small ? 6 : 8,
-        height: small ? 6 : 8,
-        borderRadius: 999,
-        background: accent,
-      }}
-    />
-    <span
-      style={{
-        position: 'absolute',
-        left: small ? 6 : 8,
-        bottom: small ? 6 : 8,
-        width: small ? 10 : 14,
-        height: 2,
-        background: accent,
-      }}
-    />
+    <span style={{position: 'absolute', left: 8, top: 8, width: 8, height: 8, borderRadius: 999, background: accent}} />
+    <span style={{position: 'absolute', left: 8, bottom: 8, width: 14, height: 2, background: accent}} />
   </div>
 );
 
-const GridBackground: React.FC<{accent: string}> = ({accent}) => (
-  <>
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        background:
-          `linear-gradient(90deg, ${theme.grid} 1px, transparent 1px), linear-gradient(${theme.grid} 1px, transparent 1px)`,
-        backgroundSize: '120px 120px',
-      }}
-    />
-  </>
-);
-
-const FallbackHook: React.FC<{scene: Scene; accent: string}> = ({scene, accent}) => (
-  <AbsoluteFill
+const GridBackground: React.FC = () => (
+  <div
     style={{
-      justifyContent: 'center',
-      padding: 88,
-      fontFamily: theme.fontFamily,
-      backgroundColor: theme.background,
-      color: theme.foreground,
+      position: 'absolute',
+      inset: 0,
+      background:
+        `linear-gradient(90deg, ${theme.grid} 1px, transparent 1px), linear-gradient(${theme.grid} 1px, transparent 1px)`,
+      backgroundSize: '120px 120px',
     }}
-  >
-      <div style={{borderLeft: `8px solid ${accent}`, paddingLeft: 34}}>
-      <div style={{fontSize: 86, fontWeight: 760, lineHeight: 1.04}}>
-        {scene.visual.headline}
-      </div>
-      <div style={{height: 28}} />
-      <div style={{fontSize: 36, lineHeight: 1.35, color: theme.muted}}>
-        {scene.narration}
-      </div>
-    </div>
-  </AbsoluteFill>
+  />
 );

@@ -15,12 +15,14 @@ def prepare_remotion_public_assets(
     renderer_dir: Path,
     storyboard: Storyboard,
     audio_path: Path,
+    settings: Settings,
 ) -> tuple[Path, Path]:
     public_dir = renderer_dir / "public" / "generated"
     public_dir.mkdir(parents=True, exist_ok=True)
 
     storyboard_public_path = public_dir / "storyboard.json"
     audio_public_path = public_dir / "voice.mp3"
+    render_scale = _render_scale_for_profile(settings.render_profile)
 
     storyboard_public_path.write_text(
         storyboard.model_dump_json(indent=2),
@@ -36,6 +38,12 @@ def prepare_remotion_public_assets(
                 "audio_public_path": str(audio_public_path),
                 "scene_count": len(storyboard.scenes),
                 "duration_seconds": round(sum(scene.duration for scene in storyboard.scenes), 2),
+                "render_profile": settings.render_profile,
+                "render_width": round(storyboard.width * render_scale),
+                "render_height": round(storyboard.height * render_scale),
+                "render_fps": storyboard.fps,
+                "render_scale": render_scale,
+                "remotion_concurrency": settings.remotion_concurrency,
             },
             ensure_ascii=False,
             indent=2,
@@ -66,8 +74,8 @@ def render_video(output_dir: Path, settings: Settings) -> Path:
     if not timed_storyboard_path.exists():
         raise FileNotFoundError(f"Timed storyboard does not exist: {timed_storyboard_path}")
     storyboard = Storyboard.model_validate_json(timed_storyboard_path.read_text(encoding="utf-8"))
-    video_path = output_dir / "videos" / "video.mp4"
-    video_path.parent.mkdir(parents=True, exist_ok=True)
+    render_scale = _render_scale_for_profile(settings.render_profile)
+    video_path = output_dir / "video.mp4"
     full_env = os.environ.copy()
     full_env["REMOTION_FFMPEG_BINARY"] = str(ffmpeg)
     full_env["PATH"] = f"{ffmpeg.parent};{node.parent};{full_env.get('PATH', '')}"
@@ -87,8 +95,12 @@ def render_video(output_dir: Path, settings: Settings) -> Path:
             ensure_ascii=False,
         ),
     ]
+    if render_scale != 1:
+        command.extend(["--scale", str(render_scale)])
     if chrome:
         command.extend(["--browser-executable", str(chrome)])
+    if settings.remotion_concurrency and settings.remotion_concurrency > 0:
+        command.extend(["--concurrency", str(settings.remotion_concurrency)])
 
     subprocess.run(
         command,
@@ -97,6 +109,21 @@ def render_video(output_dir: Path, settings: Settings) -> Path:
         env=full_env,
     )
     return video_path
+
+
+def _storyboard_for_render(storyboard: Storyboard, render_profile: str) -> Storyboard:
+    """Backward-compatible helper: preview scaling is handled by Remotion --scale."""
+    return storyboard.model_copy(deep=True)
+
+
+def _render_scale_for_profile(render_profile: str) -> float:
+    """Keep the 1080x1920 composition intact and only scale the encoded output."""
+    profile = (render_profile or "final").strip().lower()
+    if profile == "preview":
+        return 0.5
+    if profile == "draft":
+        return 0.5
+    return 1
 
 
 def _require_path(path: Path | None, name: str) -> Path:
@@ -113,4 +140,3 @@ def _optional_existing_path(path: Path | None) -> Path | None:
         return None
     resolved = path.resolve()
     return resolved if resolved.exists() else None
-

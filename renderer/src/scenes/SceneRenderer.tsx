@@ -1,7 +1,6 @@
 import React from 'react';
 import {CodeScene} from './CodeScene';
 import {CtaScene} from './CtaScene';
-import {EnhancedHtmlScene} from './EnhancedHtmlScene';
 import {EvidenceGridScene} from './EvidenceGridScene';
 import {FeatureSpotlightScene} from './FeatureSpotlightScene';
 import {FlowScene} from './FlowScene';
@@ -9,16 +8,13 @@ import {GithubHeroScene} from './GithubHeroScene';
 import {HookScene} from './HookScene';
 import {PromiseScene} from './PromiseScene';
 import {ReadmeFocusScene} from './ReadmeFocusScene';
+import {ResultMediaScene} from './ResultMediaScene';
 import {StackScene} from './StackScene';
 import {StepsScene} from './StepsScene';
 import {TextScene} from './TextScene';
 import type {Scene} from '../types';
 
 export const SceneRenderer: React.FC<{scene: Scene}> = ({scene}) => {
-  if (scene.visual.enhanced_html) {
-    return <EnhancedHtmlScene scene={scene} />;
-  }
-
   if (scene.visual.layout === 'hook') {
     return <HookScene scene={scene} />;
   }
@@ -49,6 +45,10 @@ export const SceneRenderer: React.FC<{scene: Scene}> = ({scene}) => {
 
   if (scene.visual.layout === 'code') {
     return <CodeScene scene={scene} />;
+  }
+
+  if (scene.visual.layout === 'result_media') {
+    return <ResultMediaScene scene={scene} />;
   }
 
   if (scene.visual.layout === 'stack') {

@@ -1,21 +1,32 @@
+# Secrets
 .env
 .env.*
 !.env.example
+
+# Python
 .venv/
 __pycache__/
-*.pyc
+*.py[cod]
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 *.egg-info/
-.cache/
-.tools/
-.codex/
+backend/.tmp_pytest/
+.tmp/
 
+# JavaScript / frontend builds
 node_modules/
 dist/
 build/
 .next/
+*.tsbuildinfo
+
+# Local runtime state
+.cache/
+.remotion/
+.tools/
+.codex/
+*.log
 
 # Runtime render inputs and generated media. Keep only placeholder files.
 outputs/*
@@ -24,14 +35,15 @@ renderer/outputs/
 renderer/public/generated/
 !renderer/public/.gitkeep
 
+# Large generated media
 *.mp4
+*.mov
+*.m4v
 *.mp3
 *.wav
-*.log
-*.png
-*.jpg
-*.jpeg
-*.webp
+*.m4a
+*.aac
 
+# OS noise
 .DS_Store
 Thumbs.db

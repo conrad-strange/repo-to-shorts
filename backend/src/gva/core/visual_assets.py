@@ -29,7 +29,7 @@ def prepare_visual_assets(
     repo_url: str | None,
     settings: Settings,
 ) -> Storyboard:
-    """Prepare repo-sourced visual assets and annotate storyboard scenes."""
+    """Prepare repo-sourced assets and make scenes more video-friendly."""
     output_assets = output_dir / "assets"
     public_assets = renderer_dir / "public" / "generated" / "assets"
     output_assets.mkdir(parents=True, exist_ok=True)
@@ -42,9 +42,6 @@ def prepare_visual_assets(
     }
 
     enhanced = storyboard.model_copy(deep=True)
-    for scene in enhanced.scenes:
-        scene.visual.enhanced_html = None
-        scene.visual.enhanced_by = None
     _sanitize_setup_visuals(enhanced)
 
     public_screenshot_path = None
@@ -73,12 +70,14 @@ def prepare_visual_assets(
         "section_count": len(readme.sections),
     }
 
+    _strengthen_hook_scene(enhanced, repo_summary, readme, repo_url, manifest)
     if public_screenshot_path:
         _annotate_github_hero(enhanced, public_screenshot_path, repo_url, manifest)
     if readme.title or readme.intro or readme.highlights or readme.sections:
         _annotate_readme_focus(enhanced, readme, manifest)
     _enrich_scene_layouts(enhanced, repo_summary, readme, manifest)
     _annotate_cta_repo_identity(enhanced, repo_url, manifest)
+    _compact_visual_language(enhanced)
 
     _write_manifest(output_dir, manifest)
     return enhanced
@@ -89,8 +88,7 @@ def extract_readme_evidence(repo_summary: RepoSummary) -> ReadmeEvidence:
     if readme_file is None:
         return ReadmeEvidence()
 
-    text = readme_file.excerpt
-    lines = [line.rstrip() for line in text.splitlines()]
+    lines = [line.rstrip() for line in readme_file.excerpt.splitlines()]
     title = None
     intro = None
     sections: list[str] = []
@@ -117,17 +115,12 @@ def extract_readme_evidence(repo_summary: RepoSummary) -> ReadmeEvidence:
         if highlight and highlight not in highlights:
             highlights.append(highlight)
 
-        if not intro and stripped and not stripped.startswith("#") and not stripped.startswith("!") and not stripped.startswith("["):
+        if not intro and stripped and not stripped.startswith("#") and not stripped.startswith(("!", "[")):
             candidate = _strip_markdown(stripped)
             if candidate and not _looks_like_setup_text(candidate) and not _looks_like_command(candidate):
                 intro = candidate
 
-    return ReadmeEvidence(
-        title=title,
-        intro=intro,
-        highlights=highlights[:5],
-        sections=sections[:8],
-    )
+    return ReadmeEvidence(title=title, intro=intro, highlights=highlights[:5], sections=sections[:8])
 
 
 def _capture_github_repo_screenshot(
@@ -208,6 +201,47 @@ def _use_cached_github_screenshot(result: dict, output_path: Path, public_path: 
     return result
 
 
+def _strengthen_hook_scene(
+    storyboard: Storyboard,
+    repo_summary: RepoSummary,
+    readme: ReadmeEvidence,
+    repo_url: str | None,
+    manifest: dict,
+) -> None:
+    if not storyboard.scenes:
+        return
+    scene = storyboard.scenes[0]
+    text_blob = " ".join([readme.title or "", readme.intro or "", *readme.highlights]).lower()
+    repo_handle = _repo_handle(repo_url) or repo_summary.repo_name
+
+    if "rag" in text_blob and any(word in text_blob for word in ["paper", "research", "论文"]):
+        scene.visual.headline = "论文太多？\nRAG 找答案"
+        scene.narration = "几十篇论文看不完？这个本地 RAG 项目帮你定位相关段落，快速找到答案线索。"
+        scene.visual.caption = "本地 RAG 论文问答"
+        scene.visual.bullets = ["论文检索", "本地 RAG", "相关段落"]
+        scene.visual.micro_beats = [
+            MicroBeat(text="几十篇论文", kind="warning", start_ratio=0.0),
+            MicroBeat(text="本地 RAG", kind="text", emphasis="RAG", start_ratio=0.32),
+            MicroBeat(text="定位答案", kind="metric", start_ratio=0.62),
+        ]
+    elif "video" in text_blob or "remotion" in text_blob:
+        scene.visual.headline = "项目没人看？\n先生成讲解视频"
+        scene.narration = "GitHub 项目发布后没人理解？这个工具把代码仓库转成中文竖屏讲解视频。"
+        scene.visual.caption = "仓库到短视频"
+        scene.visual.bullets = ["读取仓库", "生成分镜", "渲染视频"]
+        scene.visual.micro_beats = [
+            MicroBeat(text="读取仓库", kind="text", start_ratio=0.0),
+            MicroBeat(text="中文讲解", kind="text", start_ratio=0.32),
+            MicroBeat(text="竖屏 MP4", kind="metric", start_ratio=0.62),
+        ]
+    elif len(_strip_markdown(scene.visual.headline)) > 24 or _looks_abstract_hook(scene.visual.headline):
+        scene.visual.headline = f"{repo_handle}\n解决什么问题？"
+        scene.visual.caption = "先看核心价值"
+        scene.visual.bullets = [repo_summary.repo_name, *(repo_summary.detected_stack[:2])]
+
+    manifest["annotations"].append({"scene_id": scene.id, "layout": "stronger_hook"})
+
+
 def _annotate_github_hero(
     storyboard: Storyboard,
     asset_path: str,
@@ -258,17 +292,22 @@ def _annotate_cta_repo_identity(storyboard: Storyboard, repo_url: str | None, ma
     handle = _repo_handle(repo_url)
     if not handle:
         return
-    scene = next((item for item in reversed(storyboard.scenes) if item.visual.layout == "cta"), None)
+    scene = next(
+        (item for item in reversed(storyboard.scenes) if item.visual.layout == "cta" or item.type == "cta"),
+        None,
+    )
     if scene is None:
         return
+    scene.visual.layout = "cta"
     scene.visual.repo_url = repo_url
     scene.visual.repo_display_url = handle
     scene.visual.headline = handle
-    scene.visual.bullets = ["GitHub 上查看项目", "README / Star / Clone"]
-    scene.visual.caption = "GitHub 项目"
+    scene.visual.bullets = ["查看代码", "阅读 README", "欢迎 Star"]
+    scene.visual.caption = "开源项目"
     scene.visual.micro_beats = [
         MicroBeat(text=handle, kind="cta", emphasis="GitHub", start_ratio=0.0),
-        MicroBeat(text="README / Star / Clone", kind="cta", start_ratio=0.36),
+        MicroBeat(text="查看代码", kind="cta", start_ratio=0.28),
+        MicroBeat(text="欢迎 Star", kind="cta", start_ratio=0.56),
     ]
     manifest["annotations"].append(
         {
@@ -280,10 +319,7 @@ def _annotate_cta_repo_identity(storyboard: Storyboard, repo_url: str | None, ma
 
 
 def _annotate_readme_focus(storyboard: Storyboard, readme: ReadmeEvidence, manifest: dict) -> None:
-    scene = next(
-        (item for item in storyboard.scenes[1:] if item.visual.layout == "readme_focus"),
-        None,
-    )
+    scene = next((item for item in storyboard.scenes[1:] if item.visual.layout == "readme_focus"), None)
     if scene is None:
         scene = next(
             (
@@ -300,7 +336,7 @@ def _annotate_readme_focus(storyboard: Storyboard, readme: ReadmeEvidence, manif
     scene.type = "readme_focus"
     scene.visual.asset_type = "readme_focus"
     scene.visual.focus_target = "readme_title" if readme.title else "readme_section"
-    scene.visual.headline = "README 内容证据"
+    scene.visual.headline = "README 证据"
     bullets = [item for item in [readme.title, _compact_readme_intro(readme.intro)] if item]
     bullets.extend(readme.highlights[: 3 - len(bullets)])
     if len(bullets) < 3:
@@ -309,7 +345,7 @@ def _annotate_readme_focus(storyboard: Storyboard, readme: ReadmeEvidence, manif
         scene.visual.bullets = bullets[:3]
     scene.visual.code = None
     scene.visual.micro_beats = [
-        MicroBeat(text=text[:28], kind="text", start_ratio=index * 0.22)
+        MicroBeat(text=_short_phrase(text, 28), kind="text", start_ratio=index * 0.22)
         for index, text in enumerate(scene.visual.bullets[:3])
     ]
     manifest["annotations"].append({"scene_id": scene.id, "asset_type": "readme_focus"})
@@ -325,6 +361,7 @@ def _enrich_scene_layouts(
         if scene.visual.layout == "flow" and len(scene.visual.diagram_nodes) >= 3:
             scene.visual.layout = "architecture_map"
             scene.type = "architecture_map"
+            scene.visual.diagram_nodes = _enrich_flow_nodes(scene.visual.diagram_nodes)
             manifest["annotations"].append({"scene_id": scene.id, "layout": "architecture_map"})
             continue
 
@@ -332,7 +369,7 @@ def _enrich_scene_layouts(
             scene.visual.layout = "feature_spotlight"
             scene.type = "feature_spotlight"
             scene.visual.micro_beats = [
-                MicroBeat(text=text[:42], kind="text", start_ratio=index * 0.2)
+                MicroBeat(text=_short_phrase(text, 24), kind="text", start_ratio=index * 0.2)
                 for index, text in enumerate(scene.visual.bullets[:3])
             ]
             manifest["annotations"].append({"scene_id": scene.id, "layout": "feature_spotlight"})
@@ -343,7 +380,7 @@ def _enrich_scene_layouts(
             (
                 scene
                 for scene in storyboard.scenes[1:-1]
-                if scene.visual.layout in {"stack", "steps", "feature_spotlight"} and scene.visual.asset_type == "none"
+                if scene.visual.layout in {"stack", "steps"} and scene.visual.asset_type == "none"
             ),
             None,
         )
@@ -354,7 +391,7 @@ def _enrich_scene_layouts(
             target.visual.headline = target.visual.headline or "Repo evidence"
             target.visual.bullets = evidence_lines[:3]
             target.visual.micro_beats = [
-                MicroBeat(text=text[:36], kind="text", start_ratio=index * 0.16)
+                MicroBeat(text=_short_phrase(text, 28), kind="text", start_ratio=index * 0.16)
                 for index, text in enumerate(evidence_lines[:3])
             ]
             manifest["annotations"].append({"scene_id": target.id, "layout": "evidence_grid"})
@@ -371,6 +408,20 @@ def _repo_evidence_lines(repo_summary: RepoSummary, readme: ReadmeEvidence) -> l
     for path in [*source_files, *config_files]:
         lines.append(path)
     return [line for line in lines if line and not _is_setup_or_command(line)]
+
+
+def _compact_visual_language(storyboard: Storyboard) -> None:
+    for scene in storyboard.scenes:
+        scene.visual.headline = _short_headline(scene.visual.headline)
+        scene.visual.bullets = [_short_phrase(item, 24) for item in scene.visual.bullets[:3]]
+        scene.visual.micro_beats = [
+            beat.model_copy(update={"text": _short_phrase(beat.text, 24)})
+            for beat in (scene.visual.micro_beats or [])[:4]
+            if beat.text.strip()
+        ]
+        if scene.visual.code:
+            lines = [line[:80] for line in scene.visual.code.splitlines()[:8]]
+            scene.visual.code = "\n".join(lines)
 
 
 def _write_manifest(output_dir: Path, manifest: dict) -> None:
@@ -408,12 +459,10 @@ def _sanitize_setup_visuals(storyboard: Storyboard) -> None:
             if not visual.bullets:
                 fallback = _strip_markdown(scene.narration)[:42]
                 if _is_setup_or_command(fallback):
-                    fallback = "打开项目后体验核心功能"
+                    fallback = "体验核心功能"
                 visual.bullets = [fallback]
             if not visual.micro_beats:
-                visual.micro_beats = [
-                    MicroBeat(text=visual.bullets[0][:28], kind="text", start_ratio=0.0)
-                ]
+                visual.micro_beats = [MicroBeat(text=visual.bullets[0][:28], kind="text", start_ratio=0.0)]
 
 
 def _is_github_url(value: str) -> bool:
@@ -487,8 +536,7 @@ def _looks_like_setup_text(text: str) -> bool:
 def _strip_markdown(text: str) -> str:
     text = re.sub(r"`([^`]+)`", r"\1", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
-    text = text.strip("*_> ")
-    return text[:160]
+    return text.strip("*_> ")[:160]
 
 
 def _compact_readme_intro(text: str | None) -> str | None:
@@ -496,7 +544,57 @@ def _compact_readme_intro(text: str | None) -> str | None:
         return None
     lowered = text.lower()
     if "retrieval-augmented generation" in lowered or "rag" in lowered:
-        if "paper" in lowered or "research" in lowered:
+        if "paper" in lowered or "research" in lowered or "论文" in lowered:
             return "本地 RAG 论文检索"
-        return "本地 RAG 检索增强生成"
-    return _strip_markdown(text)[:42]
+        return "本地 RAG 检索增强"
+    return _short_phrase(_strip_markdown(text), 30)
+
+
+def _enrich_flow_nodes(nodes: list[str]) -> list[str]:
+    fallback_notes = ["输入", "处理", "索引", "检索", "输出"]
+    enriched: list[str] = []
+    for index, node in enumerate(nodes[:5]):
+        if "：" in node or ":" in node or "\n" in node:
+            enriched.append(node)
+            continue
+        note = fallback_notes[min(index, len(fallback_notes) - 1)]
+        lowered = node.lower()
+        if "pdf" in lowered or "文档" in node or "读取" in node:
+            note = "PDF / Markdown"
+        elif "分块" in node or "chunk" in lowered:
+            note = "保留上下文"
+        elif "faiss" in lowered or "向量" in node or "索引" in node:
+            note = "向量索引"
+        elif "bm25" in lowered or "检索" in node:
+            note = "召回相关内容"
+        elif "llm" in lowered or "答案" in node or "生成" in node:
+            note = "答案 + 来源"
+        enriched.append(f"{node}：{note}")
+    return enriched
+
+
+def _short_headline(text: str) -> str:
+    stripped = _strip_markdown(text).strip()
+    if "\n" in stripped:
+        return "\n".join(_short_phrase(part, 14) for part in stripped.splitlines()[:2])
+    return _short_phrase(stripped, 18)
+
+
+def _short_phrase(text: str, limit: int) -> str:
+    cleaned = _strip_markdown(text)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    separators = ["，", "。", "；", "、", ",", ";", " - ", " — ", " / "]
+    for separator in separators:
+        if separator in cleaned:
+            candidate = cleaned.split(separator, 1)[0].strip()
+            if 4 <= len(candidate) <= limit:
+                return candidate
+    return cleaned[:limit].rstrip() + "…"
+
+
+def _looks_abstract_hook(text: str) -> bool:
+    lowered = text.lower()
+    abstract_words = ("关键信息", "快速了解", "项目介绍", "看懂项目", "效率工具")
+    return any(word in lowered for word in abstract_words)

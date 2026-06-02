@@ -46,7 +46,7 @@ export const FeatureSpotlightScene: React.FC<{scene: Scene}> = ({scene}) => {
                 />
               ) : null}
               <div style={{position: 'relative', color: theme.muted, fontSize: 22, marginBottom: 12}}>
-                {index === 0 ? 'Primary signal' : `Evidence ${index + 1}`}
+                {index === 0 ? '核心亮点' : `可信证据 ${index + 1}`}
               </div>
               <div
                 style={{
