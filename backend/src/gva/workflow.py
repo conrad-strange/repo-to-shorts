@@ -12,7 +12,7 @@ from gva.agents.repo_reader import read_repo
 from gva.agents.script_writer import render_script_markdown, write_script
 from gva.agents.storyboard_writer import write_storyboard
 from gva.config import Settings
-from gva.core.llm_client import has_real_api_key
+from gva.core.llm_client import llm_settings_error
 from gva.core.captions import attach_caption_cues
 from gva.core.demo_report import generate_demo_assets
 from gva.core.evidence import build_evidence_index, evidence_refs_for_keys, safe_fallback_refs
@@ -102,13 +102,10 @@ def run_render_workflow(
         "detected_stack": repo_summary.detected_stack,
         "selected_files": len(repo_summary.files),
     }
-    has_llm_key = True
-    if settings.llm_provider == "deepseek" and not has_real_api_key(settings.deepseek_api_key):
-        metadata["next_step_requires"] = "DEEPSEEK_API_KEY for Project Understanding Agent"
-        has_llm_key = False
-    elif settings.llm_provider == "openai" and not has_real_api_key(settings.openai_api_key):
-        metadata["next_step_requires"] = "OPENAI_API_KEY for Project Understanding Agent"
-        has_llm_key = False
+    llm_error = llm_settings_error(settings)
+    has_llm_key = llm_error is None
+    if llm_error:
+        metadata["next_step_requires"] = f"{llm_error} Project Understanding Agent needs a configured LLM."
 
     if has_llm_key:
         _emit_progress(progress_callback, "evidence", "理解项目结构", 22)

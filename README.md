@@ -71,61 +71,40 @@ pip install -r requirements.txt
 pip install -e backend
 ```
 
-### 2. Node / Remotion
+### 2. Setup
 
-Vite 需要 Node.js 20.19+ 或 22.12+。FFmpeg 用于音频标准化、预览帧和最终视频检查。
-
-推荐二选一：
-
-**路线 A：使用项目内 portable tools（Windows 推荐）**
+Windows 推荐使用项目内 portable tools：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/install-portable-tools.ps1
+gva setup --portable
 ```
 
-脚本会下载 Node.js 和 FFmpeg 到 `.tools/`，并自动写入 `.env`：
+它会自动完成：
 
 ```text
-NODE_EXE=...
-NPM_CMD=...
-FFMPEG_EXE=...
+1. 创建 .env
+2. 下载 Node.js / FFmpeg 到 .tools/
+3. 写入 NODE_EXE / NPM_CMD / FFMPEG_EXE
+4. 提示填写 LLM API key
+5. 安装 renderer 和 frontend 的 npm 依赖
+6. 构建 Web UI
+7. 运行 gva doctor
 ```
 
 `.tools/` 只提交 `.gitkeep`，实际下载内容不会上传到 GitHub。
-如果 `.env` 不存在，脚本会先从 `.env.example` 创建；如果已经存在，只更新工具路径。
 
-**路线 B：使用系统已安装的 Node / FFmpeg**
-
-```powershell
-node -v
-npm -v
-ffmpeg -version
-```
-
-如果它们都在 PATH 里，程序会自动发现；也可以手动在 `.env` 中填写 `NODE_EXE` / `NPM_CMD` / `FFMPEG_EXE`。
-
-安装前端和渲染依赖：
+如果你已经在系统中安装了 Node.js、npm 和 FFmpeg，也可以使用：
 
 ```powershell
-cd renderer
-npm install
-cd ..
-
-cd frontend
-npm install
-npm run build
-cd ..
+gva setup
 ```
 
-### 3. Environment
+### 3. LLM Provider
 
-```powershell
-if (-not (Test-Path .env)) { copy .env.example .env }
-```
-
-至少填写：
+默认使用 DeepSeek。`gva setup` 会在缺少 key 时用隐藏输入提示填写：
 
 ```text
+LLM_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your_key
 DEEPSEEK_MODEL_REASONING=deepseek-v4-pro
 DEEPSEEK_MODEL_GENERATION=deepseek-v4-flash
@@ -138,13 +117,32 @@ CHROME_EXE=C:\Program Files\Google\Chrome\Application\chrome.exe
 
 Edge TTS 默认不需要 API key。
 
+也可以切换到其他 LLM：
+
+```text
+# Official OpenAI
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your_key
+OPENAI_MODEL_REASONING=gpt-5.2
+OPENAI_MODEL_GENERATION=gpt-5-mini
+
+# Any OpenAI-compatible endpoint
+LLM_PROVIDER=openai_compatible
+OPENAI_COMPATIBLE_API_KEY=your_key
+OPENAI_COMPATIBLE_BASE_URL=https://example.com/v1
+OPENAI_COMPATIBLE_MODEL_REASONING=your-reasoning-model
+OPENAI_COMPATIBLE_MODEL_GENERATION=your-fast-model
+```
+
+`openai_compatible` 适合接入 OpenRouter、SiliconFlow、Moonshot、DashScope 等兼容 OpenAI Chat Completions 的服务。不同平台的 model id 和 base URL 不一样，请以各自控制台为准。
+
 ### 4. Check Environment
 
 ```powershell
 gva doctor
 ```
 
-`doctor` 会检查 Python、`.env`、DeepSeek key、Node.js、npm、FFmpeg、Chrome、frontend build 和 renderer 依赖状态。
+`doctor` 会检查 Python、`.env`、LLM provider、Node.js、npm、FFmpeg、Chrome、frontend build 和 renderer 依赖状态。
 
 ## Usage
 

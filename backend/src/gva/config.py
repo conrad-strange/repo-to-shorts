@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     openai_model_reasoning: str = "gpt-5.2"
     openai_model_generation: str = "gpt-5-mini"
 
+    openai_compatible_api_key: Optional[str] = None
+    openai_compatible_base_url: Optional[str] = None
+    openai_compatible_model_reasoning: Optional[str] = None
+    openai_compatible_model_generation: Optional[str] = None
+
     tts_provider: str = "edge"
     tts_voice: str = "zh-CN-XiaoxiaoNeural"
     tts_rate: str = "+25%"

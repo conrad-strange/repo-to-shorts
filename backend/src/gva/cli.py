@@ -1,5 +1,7 @@
 from pathlib import Path
+import getpass
 import re
+import shutil
 import subprocess
 import sys
 from typing import Optional
@@ -10,6 +12,7 @@ from rich.table import Table
 
 from gva.config import Settings
 from gva.agents.evaluator import evaluate_output
+from gva.core.llm_client import llm_settings_error, normalize_llm_provider, has_real_api_key
 from gva.core.render_bridge import find_ffmpeg, find_node, find_npm
 from gva.core.runs import clean_old_runs, list_run_ids, resolve_run_dir
 from gva.workflow import run_render_workflow
@@ -152,6 +155,51 @@ def clean_command(
         console.print(str(path))
 
 
+@app.command("setup")
+def setup_command(
+    portable: bool = typer.Option(
+        False,
+        "--portable/--no-portable",
+        help="Download portable Node.js and FFmpeg under .tools on Windows.",
+    ),
+    skip_build: bool = typer.Option(
+        False,
+        "--skip-build",
+        help="Skip npm install/build steps and only prepare .env/tools.",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Answer yes to non-secret setup prompts.",
+    ),
+) -> None:
+    """Prepare .env, tools, JS dependencies, frontend build, then run doctor."""
+    env_path = Path(".env")
+    env_example = Path(".env.example")
+    if not env_path.exists():
+        if not env_example.exists():
+            raise FileNotFoundError(".env.example does not exist.")
+        shutil.copyfile(env_example, env_path)
+        console.print("[green]Created .env from .env.example.[/green]")
+    else:
+        console.print("[green].env already exists.[/green]")
+
+    if portable:
+        _run_portable_tools_installer()
+
+    settings = Settings()
+    _prompt_for_missing_llm(settings, yes=yes)
+    settings = Settings()
+
+    if not skip_build:
+        _install_node_package(settings, settings.renderer_dir.resolve(), build=False)
+        _install_node_package(settings, settings.frontend_dir.resolve(), build=True)
+
+    console.print("[green]Setup finished. Running doctor...[/green]")
+    doctor_command()
+
+
 @app.command("doctor")
 def doctor_command() -> None:
     """Check local dependencies needed by the web UI and renderer."""
@@ -161,12 +209,9 @@ def doctor_command() -> None:
     checks.append(("Python", sys.version_info >= (3, 11), sys.version.split()[0], "Use Python 3.11+.", True))
     checks.append((".env", Path(".env").exists(), ".env found", "Run: copy .env.example .env", True))
 
-    provider = (settings.llm_provider or "deepseek").lower()
-    if provider == "deepseek":
-        key_ok = bool(settings.deepseek_api_key)
-        checks.append(("DeepSeek API key", key_ok, "Configured", "Set DEEPSEEK_API_KEY in .env.", True))
-    else:
-        checks.append(("LLM provider", True, provider, "Only DeepSeek is the tested default.", False))
+    provider = normalize_llm_provider(settings.llm_provider)
+    llm_error = llm_settings_error(settings)
+    checks.append(("LLM provider", llm_error is None, provider, llm_error or "Configured", True))
 
     node_path, node_detail = _tool_detail(lambda: find_node(settings), ["-v"])
     node_ok = bool(node_path) and _node_version_ok(node_detail)
@@ -253,6 +298,102 @@ def _tool_detail(
     if first_line and output:
         output = output.splitlines()[0]
     return path, output or f"{path.name} found"
+
+
+def _run_portable_tools_installer() -> None:
+    if sys.platform != "win32":
+        console.print("[yellow]Portable tools installer is Windows-only. Skipping.[/yellow]")
+        return
+    script = Path("scripts") / "install-portable-tools.ps1"
+    if not script.exists():
+        raise FileNotFoundError(f"Portable tools script does not exist: {script}")
+    console.print("[cyan]Installing portable Node.js and FFmpeg under .tools...[/cyan]")
+    subprocess.run(
+        [
+            "powershell",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+        ],
+        check=True,
+    )
+
+
+def _prompt_for_missing_llm(settings: Settings, yes: bool = False) -> None:
+    provider = normalize_llm_provider(settings.llm_provider)
+    if provider == "deepseek":
+        if not has_real_api_key(settings.deepseek_api_key):
+            _prompt_secret_to_env("DEEPSEEK_API_KEY", "Enter DEEPSEEK_API_KEY")
+        return
+    if provider == "openai":
+        if not has_real_api_key(settings.openai_api_key):
+            _prompt_secret_to_env("OPENAI_API_KEY", "Enter OPENAI_API_KEY")
+        return
+    if provider == "openai_compatible":
+        if not has_real_api_key(settings.openai_compatible_api_key):
+            _prompt_secret_to_env("OPENAI_COMPATIBLE_API_KEY", "Enter OPENAI_COMPATIBLE_API_KEY")
+        if not (settings.openai_compatible_base_url or "").strip():
+            _prompt_value_to_env("OPENAI_COMPATIBLE_BASE_URL", "Enter OPENAI_COMPATIBLE_BASE_URL")
+        if not (settings.openai_compatible_model_generation or "").strip():
+            _prompt_value_to_env("OPENAI_COMPATIBLE_MODEL_GENERATION", "Enter OPENAI_COMPATIBLE_MODEL_GENERATION")
+        if yes and not (settings.openai_compatible_model_reasoning or "").strip():
+            return
+        if not (settings.openai_compatible_model_reasoning or "").strip():
+            value = input("Enter OPENAI_COMPATIBLE_MODEL_REASONING (optional, press Enter to reuse generation model): ").strip()
+            if value:
+                _set_env_value(Path(".env"), "OPENAI_COMPATIBLE_MODEL_REASONING", value)
+        return
+    console.print(f"[yellow]Unsupported LLM_PROVIDER in .env: {settings.llm_provider}[/yellow]")
+
+
+def _prompt_secret_to_env(key: str, prompt: str) -> None:
+    value = getpass.getpass(f"{prompt}: ").strip()
+    if not value:
+        console.print(f"[yellow]{key} not set. You can fill it in .env later.[/yellow]")
+        return
+    _set_env_value(Path(".env"), key, value)
+    console.print(f"[green]{key} saved to .env.[/green]")
+
+
+def _prompt_value_to_env(key: str, prompt: str) -> None:
+    value = input(f"{prompt}: ").strip()
+    if not value:
+        console.print(f"[yellow]{key} not set. You can fill it in .env later.[/yellow]")
+        return
+    _set_env_value(Path(".env"), key, value)
+    console.print(f"[green]{key} saved to .env.[/green]")
+
+
+def _set_env_value(path: Path, key: str, value: str) -> None:
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    pattern = re.compile(rf"^{re.escape(key)}=")
+    updated = False
+    next_lines = []
+    for line in lines:
+        if pattern.match(line):
+            next_lines.append(f"{key}={value}")
+            updated = True
+        else:
+            next_lines.append(line)
+    if not updated:
+        next_lines.append(f"{key}={value}")
+    path.write_text("\n".join(next_lines) + "\n", encoding="utf-8")
+
+
+def _install_node_package(settings: Settings, directory: Path, build: bool = False) -> None:
+    package_json = directory / "package.json"
+    if not package_json.exists():
+        raise FileNotFoundError(f"package.json does not exist: {package_json}")
+    npm = find_npm(settings)
+    if not (directory / "node_modules").exists():
+        console.print(f"[cyan]Installing npm dependencies in {directory}...[/cyan]")
+        subprocess.run([str(npm), "install"], cwd=directory, check=True)
+    else:
+        console.print(f"[green]npm dependencies already exist in {directory}.[/green]")
+    if build:
+        console.print(f"[cyan]Building frontend in {directory}...[/cyan]")
+        subprocess.run([str(npm), "run", "build"], cwd=directory, check=True)
 
 
 def _node_version_ok(detail: str) -> bool:

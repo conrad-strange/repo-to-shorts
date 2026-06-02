@@ -8,7 +8,7 @@ from openai import BadRequestError
 
 from gva.config import Settings
 from gva.core.json_utils import loads_json_object
-from gva.core.llm_client import build_openai_client, get_reasoning_model, has_real_api_key
+from gva.core.llm_client import build_openai_client, get_reasoning_model, has_configured_llm
 from gva.models.evidence import ClaimCheck, EvidenceIndex, VerificationReport
 from gva.models.script import VideoScript
 from gva.models.storyboard import Storyboard
@@ -281,11 +281,7 @@ def _soften_llm_verdict(
 
 
 def _has_key(settings: Settings) -> bool:
-    if settings.llm_provider == "deepseek":
-        return has_real_api_key(settings.deepseek_api_key)
-    if settings.llm_provider == "openai":
-        return has_real_api_key(settings.openai_api_key)
-    return False
+    return has_configured_llm(settings)
 
 
 def _write_report(output_dir: Path, report: VerificationReport) -> None:
