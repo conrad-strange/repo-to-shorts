@@ -2,6 +2,7 @@
 
 <p align="center">
   输入一个公开 GitHub 仓库，生成中文 9:16 项目讲解短视频。
+  Repo to Shorts 面向的是“想快速展示项目价值的开发者”，不是复杂视频剪辑器。
 </p>
 
 <p align="center">
