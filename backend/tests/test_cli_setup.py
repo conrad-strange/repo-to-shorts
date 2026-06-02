@@ -40,3 +40,14 @@ def test_find_powershell_returns_none_when_missing(monkeypatch) -> None:
     monkeypatch.setattr(cli.Path, "exists", lambda _self: False)
 
     assert cli._find_powershell_exe() is None
+
+
+def test_npm_setup_env_uses_project_local_cache(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    env = cli._npm_setup_env(Path(r"C:\tools\node\npm.cmd"))
+
+    assert env["npm_config_cache"] == str((tmp_path / ".tools" / "npm-cache").resolve())
+    assert env["npm_config_audit"] == "false"
+    assert env["npm_config_fund"] == "false"
+    assert (tmp_path / ".tools" / "npm-cache").exists()

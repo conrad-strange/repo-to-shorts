@@ -420,14 +420,43 @@ def _install_node_package(settings: Settings, directory: Path, build: bool = Fal
     if not package_json.exists():
         raise FileNotFoundError(f"package.json does not exist: {package_json}")
     npm = find_npm(settings)
+    env = _npm_setup_env(npm)
     if not (directory / "node_modules").exists():
         console.print(f"[cyan]Installing npm dependencies in {directory}...[/cyan]")
-        subprocess.run([str(npm), "install"], cwd=directory, check=True)
+        _run_npm_command(npm, ["install", "--no-audit", "--no-fund"], directory, env)
     else:
         console.print(f"[green]npm dependencies already exist in {directory}.[/green]")
     if build:
         console.print(f"[cyan]Building frontend in {directory}...[/cyan]")
-        subprocess.run([str(npm), "run", "build"], cwd=directory, check=True)
+        _run_npm_command(npm, ["run", "build"], directory, env)
+
+
+def _npm_setup_env(npm: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    cache_dir = (Path(".tools") / "npm-cache").resolve()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    env["npm_config_cache"] = str(cache_dir)
+    env["npm_config_audit"] = "false"
+    env["npm_config_fund"] = "false"
+    env["npm_config_update_notifier"] = "false"
+    env["PATH"] = f"{npm.parent};{env.get('PATH', '')}"
+    return env
+
+
+def _run_npm_command(npm: Path, args: list[str], cwd: Path, env: dict[str, str]) -> None:
+    command = [str(npm), *args]
+    try:
+        subprocess.run(command, cwd=cwd, check=True, env=env)
+    except subprocess.CalledProcessError as exc:
+        console.print(
+            "[red]npm install/build failed.[/red]\n"
+            f"Command: {' '.join(command)}\n"
+            f"Working directory: {cwd}\n"
+            "Repo to Shorts uses a project-local npm cache at .tools/npm-cache during setup. "
+            "If the failure is a network or registry issue, delete .tools/npm-cache/_logs after checking it, "
+            "then rerun: gva setup --portable"
+        )
+        raise typer.Exit(exc.returncode)
 
 
 def _node_version_ok(detail: str) -> bool:
