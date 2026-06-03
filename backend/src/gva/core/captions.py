@@ -73,21 +73,50 @@ def _split_narration(text: str) -> list[str]:
     rough = [part for part in re.split(r"(?<=[。！？!?；;])", text) if part]
     parts: list[str] = []
     for item in rough:
+        item = item.strip()
         if len(item) <= 26:
             parts.append(item)
             continue
         chunks = [chunk for chunk in re.split(r"(?<=[，,、])", item) if chunk]
         current = ""
         for chunk in chunks:
-            if len(current) + len(chunk) <= 24:
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            if len(current) + len(chunk) <= 34:
                 current += chunk
             else:
                 if current:
                     parts.append(current)
-                current = chunk
+                if len(chunk) > 34:
+                    wrapped = _wrap_caption_text(chunk, max_length=34)
+                    parts.extend(wrapped[:-1])
+                    current = wrapped[-1] if wrapped else ""
+                else:
+                    current = chunk
         if current:
             parts.append(current)
-    return [part[:34] for part in parts[:5]]
+    return parts[:8]
+
+
+def _wrap_caption_text(text: str, max_length: int) -> list[str]:
+    tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9_+#./:-]*|\s+|.", text)
+    lines: list[str] = []
+    current = ""
+    for token in tokens:
+        if token.isspace():
+            if current and not current.endswith(" "):
+                current += " "
+            continue
+        if len((current + token).strip()) <= max_length:
+            current += token
+            continue
+        if current.strip():
+            lines.append(current.strip())
+        current = token if len(token) <= max_length else token[:max_length]
+    if current.strip():
+        lines.append(current.strip())
+    return lines
 
 
 def _keywords(text: str) -> list[str]:

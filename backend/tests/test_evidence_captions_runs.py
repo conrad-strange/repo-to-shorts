@@ -80,6 +80,30 @@ def test_caption_cues_stay_inside_scene_duration(tmp_path: Path) -> None:
     assert (tmp_path / "subtitles.vtt").exists()
 
 
+def test_caption_cues_do_not_cut_ascii_words(tmp_path: Path) -> None:
+    storyboard = Storyboard(
+        title="Demo",
+        scenes=[
+            Scene(
+                id="scene-001",
+                type="text",
+                start=0,
+                duration=6.0,
+                narration="Repo to Shorts 帮你自动生成：输入任何公开 GitHub 仓库，它就能分析 README、代码。",
+                visual=VisualSpec(layout="text", headline="Repo to Shorts"),
+            )
+        ],
+    )
+
+    timed = attach_caption_cues(storyboard, tmp_path)
+    text = "\n".join(cue.text for cue in timed.scenes[0].captions)
+
+    assert "GitHub" in text
+    assert "README" in text
+    assert not any(cue.text.endswith("GitHu") for cue in timed.scenes[0].captions)
+    assert not any(cue.text.endswith("READM") for cue in timed.scenes[0].captions)
+
+
 def test_verifier_blocks_install_commands(tmp_path: Path) -> None:
     index = build_evidence_index(_repo_summary(), tmp_path)
     ref = index.items[0].id

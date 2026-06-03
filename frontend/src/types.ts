@@ -22,6 +22,14 @@ export interface VisualSpec {
   media_type?: 'image' | 'video' | 'none';
 }
 
+export interface CaptionCue {
+  start: number;
+  end: number;
+  text: string;
+  keywords?: string[];
+  source_scene_id?: string;
+}
+
 export interface Scene {
   id: string;
   type: string;
@@ -30,6 +38,7 @@ export interface Scene {
   narration: string;
   visual: VisualSpec;
   evidence_refs?: string[];
+  captions?: CaptionCue[];
 }
 
 export interface Storyboard {

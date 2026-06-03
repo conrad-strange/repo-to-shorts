@@ -153,6 +153,10 @@ export function App() {
   const selectedScene = useMemo(() => {
     return storyboard?.scenes.find((scene) => scene.id === selectedSceneId) ?? storyboard?.scenes[0] ?? null;
   }, [storyboard, selectedSceneId]);
+  const selectedCaptionPreview = useMemo(
+    () => (selectedScene ? captionPreviewForScene(selectedScene) : []),
+    [selectedScene],
+  );
 
   async function refreshProjects() {
     try {
@@ -818,7 +822,7 @@ export function App() {
                 />
               </label>
               <label>
-                短字幕
+                画面短句
                 <input
                   value={selectedScene.visual.caption ?? ''}
                   onChange={(event) => updateSelectedVisual({caption: event.target.value})}
@@ -856,6 +860,26 @@ export function App() {
                   onChange={(event) => updateSelectedScene({narration: event.target.value})}
                 />
               </label>
+              <div className="caption-preview-box">
+                <div className="label-with-tip">
+                  <span>底部字幕预览</span>
+                  <InfoTip text="视频底部字幕根据旁白自动生成；画面短句只影响画面里的小文案。" />
+                </div>
+                {selectedCaptionPreview.length ? (
+                  <div className="caption-cue-list">
+                    {selectedCaptionPreview.map((cue, index) => (
+                      <div key={`${cue.start}-${cue.end}-${index}`} className="caption-cue-row">
+                        <span>
+                          {formatSeconds(cue.start)}-{formatSeconds(cue.end)}
+                        </span>
+                        <strong>{cue.text}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="muted-copy">暂无底部字幕。填写旁白后，生成视频时会自动切分。</p>
+                )}
+              </div>
               <div className="scene-tool-head">
                 <button type="button" onClick={() => setAddSceneOpen((value) => !value)}>
                   + 新增代码 / 结果画面
@@ -1448,6 +1472,61 @@ function validateRepoUrl(value: string): string {
     return '链接格式应为 https://github.com/owner/repo。';
   }
   return '';
+}
+
+function captionPreviewForScene(scene: Scene): Array<{start: number; end: number; text: string}> {
+  const existing = scene.captions || [];
+  if (existing.length) {
+    return existing
+      .filter((cue) => cue.text?.trim())
+      .map((cue) => ({start: cue.start, end: cue.end, text: cue.text.trim()}));
+  }
+  const parts = splitCaptionPreview(scene.narration);
+  if (!parts.length) return [];
+  const duration = Math.max(0.6, Number(scene.duration) || 3);
+  const weightTotal = parts.reduce((sum, part) => sum + Math.max(part.length, 6), 0);
+  let cursor = 0;
+  return parts.map((part, index) => {
+    const start = cursor;
+    const end =
+      index === parts.length - 1
+        ? duration
+        : Math.min(duration, cursor + Math.max(0.75, (duration * Math.max(part.length, 6)) / weightTotal));
+    cursor = end;
+    return {start: roundOne(start), end: roundOne(end), text: part};
+  });
+}
+
+function splitCaptionPreview(text: string): string[] {
+  const cleaned = text.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return [];
+  const rough = cleaned.split(/(?<=[。！？!?；;])/).filter(Boolean);
+  const parts = rough.flatMap((part) => wrapCaptionPreview(part.trim(), 34));
+  return parts.slice(0, 8);
+}
+
+function wrapCaptionPreview(text: string, maxLength: number): string[] {
+  const tokens = text.match(/[A-Za-z0-9][A-Za-z0-9_+#./:-]*|\s+|./g) || [];
+  const lines: string[] = [];
+  let current = '';
+  for (const token of tokens) {
+    if (/^\s+$/.test(token)) {
+      if (current && !current.endsWith(' ')) current += ' ';
+      continue;
+    }
+    if ((current + token).trim().length <= maxLength) {
+      current += token;
+      continue;
+    }
+    if (current.trim()) lines.push(current.trim());
+    current = token.length > maxLength ? token.slice(0, maxLength) : token;
+  }
+  if (current.trim()) lines.push(current.trim());
+  return lines;
+}
+
+function formatSeconds(value: number): string {
+  return `${Math.max(0, value).toFixed(1)}s`;
 }
 
 function cleanUserBrief(value: string): string {

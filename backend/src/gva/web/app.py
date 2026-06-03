@@ -731,9 +731,7 @@ def _run_dir(project_id: str, run_id: str) -> Path:
 def _run_payload(project_id: str, run_id: str, project_root: Path) -> dict[str, Any]:
     run_dir = resolve_run_dir(project_root, run_id)
     metadata = _read_json(run_dir / "workflow-metadata.json") or {}
-    storyboard = _read_json(
-        _first_existing(run_dir / "storyboard.edited.json", run_dir / "storyboard.final.json", run_dir / "storyboard.json")
-    )
+    storyboard = _storyboard_for_ui(run_dir)
     return {
         "project_id": project_id,
         "run_id": run_id,
@@ -747,6 +745,34 @@ def _run_payload(project_id: str, run_id: str, project_root: Path) -> dict[str, 
         "evaluation": _read_json(run_dir / "evaluation-report.json"),
         "files": _artifact_urls(project_id, run_id, run_dir),
     }
+
+
+def _storyboard_for_ui(run_dir: Path) -> Any:
+    base = _read_json(
+        _first_existing(run_dir / "storyboard.edited.json", run_dir / "storyboard.final.json", run_dir / "storyboard.json")
+    )
+    timed = _read_json(run_dir / "storyboard-timed.json")
+    if not isinstance(base, dict) or not isinstance(base.get("scenes"), list):
+        return timed or base
+    if not isinstance(timed, dict) or not isinstance(timed.get("scenes"), list):
+        return base
+
+    timed_by_id = {
+        scene.get("id"): scene
+        for scene in timed.get("scenes", [])
+        if isinstance(scene, dict) and isinstance(scene.get("id"), str)
+    }
+    merged = json.loads(json.dumps(base))
+    for scene in merged.get("scenes", []):
+        if not isinstance(scene, dict):
+            continue
+        timed_scene = timed_by_id.get(scene.get("id"))
+        if not isinstance(timed_scene, dict):
+            continue
+        for key in ("start", "duration", "captions"):
+            if key in timed_scene:
+                scene[key] = timed_scene[key]
+    return merged
 
 
 def _artifact_urls(project_id: str, run_id: str, run_dir: Path) -> dict[str, str | None]:

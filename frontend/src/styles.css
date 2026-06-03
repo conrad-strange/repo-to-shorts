@@ -532,6 +532,49 @@ label {
   padding: 0 12px;
 }
 
+.caption-preview-box {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(240, 246, 252, 0.08);
+  border-radius: 8px;
+  background: rgba(1, 4, 9, 0.35);
+  padding: 10px;
+}
+
+.caption-cue-list {
+  display: grid;
+  gap: 6px;
+}
+
+.caption-cue-row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  border: 1px solid rgba(240, 246, 252, 0.07);
+  border-radius: 7px;
+  background: rgba(13, 17, 23, 0.72);
+  padding: 7px 8px;
+}
+
+.caption-cue-row span {
+  color: #58a6ff;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.caption-cue-row strong {
+  color: #c9d1d9;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.theme-bomb .caption-cue-row span {
+  color: #ffb86c;
+}
+
 .add-scene-panel {
   display: grid;
   gap: 10px;
