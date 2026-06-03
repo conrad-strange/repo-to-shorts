@@ -18,19 +18,6 @@
 
 Repo to Shorts 是一个面向开源开发者的 AI 视频生成工具。它会读取公开 GitHub 仓库的 README、目录结构、配置文件和核心代码，生成中文讲解稿、分镜、字幕、TTS 配音，并用 Remotion 渲染成适合手机平台发布的竖屏 MP4。
 
-它不是通用 AI 视频生成器，也不依赖视频大模型。当前主线是：
-
-```text
-GitHub Repo
-  -> Repo Analyzer
-  -> Evidence Index
-  -> Script / Storyboard Agents
-  -> Verifier / Repair
-  -> Edge TTS + Captions
-  -> Remotion Renderer
-  -> 9:16 MP4
-```
-
 ## Preview
 
 <p align="center">
@@ -46,6 +33,19 @@ GitHub Repo
 </p>
 
 ## Features
+
+当前主线是：
+
+```text
+GitHub Repo
+  -> Repo Analyzer
+  -> Evidence Index
+  -> Script / Storyboard Agents
+  -> Verifier / Repair
+  -> Edge TTS + Captions
+  -> Remotion Renderer
+  -> 9:16 MP4
+```
 
 <table>
   <tr>
