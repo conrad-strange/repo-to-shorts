@@ -122,6 +122,7 @@ export interface JobDetail {
 
 export interface RerenderPayload {
   render_profile: string;
+  user_brief?: string;
   brand_mode?: BrandMode;
   bomb_circle?: string;
   bomb_again_count?: number;

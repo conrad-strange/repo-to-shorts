@@ -193,7 +193,12 @@ def run_render_workflow(
         pacing_changed = False
         web_edited_storyboard = (output_dir / "logs" / "web-edited-storyboard.json").exists()
         _emit_progress(progress_callback, "storyboard", "准备 GitHub/README 视觉资产", 60)
-        if _apply_bomb_mode_to_storyboard(storyboard, settings, repo_url):
+        if _apply_bomb_mode_to_storyboard(
+            storyboard,
+            settings,
+            repo_url,
+            preserve_user_copy=web_edited_storyboard,
+        ):
             metadata["bomb_hook"] = _bomb_hook_text(settings)
             pacing_changed = True
         if web_edited_storyboard:
@@ -212,7 +217,12 @@ def run_render_workflow(
         if _soften_risky_video_claims(storyboard):
             metadata["risky_claims_softened"] = True
             pacing_changed = True
-        if _apply_bomb_mode_to_storyboard(storyboard, settings, repo_url):
+        if _apply_bomb_mode_to_storyboard(
+            storyboard,
+            settings,
+            repo_url,
+            preserve_user_copy=web_edited_storyboard,
+        ):
             metadata["bomb_hook"] = _bomb_hook_text(settings)
             pacing_changed = True
         _attach_storyboard_evidence_refs(storyboard, script, evidence_index)
@@ -484,7 +494,12 @@ def _apply_bomb_mode_to_script(script, settings: Settings) -> bool:
     return changed
 
 
-def _apply_bomb_mode_to_storyboard(storyboard, settings: Settings, repo_url: str | None) -> bool:
+def _apply_bomb_mode_to_storyboard(
+    storyboard,
+    settings: Settings,
+    repo_url: str | None,
+    preserve_user_copy: bool = False,
+) -> bool:
     if not _is_bomb_mode(settings) or not storyboard.scenes:
         return False
     hook = _bomb_hook_text(settings)
@@ -496,14 +511,14 @@ def _apply_bomb_mode_to_storyboard(storyboard, settings: Settings, repo_url: str
     if first.visual.layout != "github_hero":
         first.visual.layout = "github_hero"
         changed = True
-    if first.visual.headline != hook:
+    if not preserve_user_copy and first.visual.headline != hook:
         first.visual.headline = hook
         changed = True
     next_narration = _prepend_bomb_hook(first.narration, hook)
-    if first.narration != next_narration:
+    if not preserve_user_copy and first.narration != next_narration:
         first.narration = next_narration
         changed = True
-    if first.visual.caption != "先别急着滑走，看证据":
+    if not preserve_user_copy and first.visual.caption != "先别急着滑走，看证据":
         first.visual.caption = "先别急着滑走，看证据"
         changed = True
     if first.visual.accent_color != "#f85149":
@@ -524,7 +539,7 @@ def _apply_bomb_mode_to_storyboard(storyboard, settings: Settings, repo_url: str
         MicroBeat(text="证据校验", kind="text", emphasis="evidence", start_ratio=0.34),
         MicroBeat(text="看完再 Star", kind="cta", emphasis="github", start_ratio=0.62),
     ]
-    if [beat.text for beat in first.visual.micro_beats[:3]] != [beat.text for beat in bomb_beats]:
+    if not preserve_user_copy and [beat.text for beat in first.visual.micro_beats[:3]] != [beat.text for beat in bomb_beats]:
         first.visual.micro_beats = bomb_beats
         changed = True
     return changed

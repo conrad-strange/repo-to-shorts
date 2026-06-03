@@ -66,6 +66,7 @@ class StoryboardUpdateRequest(BaseModel):
 
 class RerenderRequest(BaseModel):
     render_profile: RenderProfile | None = None
+    user_brief: str | None = None
     brand_mode: BrandMode | None = None
     bomb_circle: str | None = None
     bomb_again_count: int | None = Field(default=None, ge=1, le=8)
@@ -411,12 +412,13 @@ def _rerender_payload(
 
     repo_url = metadata.get("repo_url")
     project_path = None if repo_url else Path(metadata["project_path"]) if metadata.get("project_path") else None
+    user_brief = request.user_brief if request.user_brief is not None else metadata.get("user_brief")
     result = run_render_workflow(
         project_path=project_path,
         repo_url=repo_url,
         output_dir=root_output_dir,
         settings=settings,
-        user_brief=metadata.get("user_brief"),
+        user_brief=user_brief,
         dry_run=False,
         force_tts=True,
         force_render=True,

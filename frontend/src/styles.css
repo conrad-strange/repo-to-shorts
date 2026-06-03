@@ -483,8 +483,39 @@ label {
 }
 
 .brief-input {
-  min-height: 96px;
+  min-height: 48px;
+  max-height: 150px;
   line-height: 1.55;
+  overflow-y: auto;
+}
+
+.intent-input {
+  min-height: 48px;
+  max-height: 150px;
+  line-height: 1.5;
+  overflow-y: auto;
+  resize: vertical;
+}
+
+.scene-intent-box {
+  display: grid;
+  gap: 7px;
+  border: 1px solid rgba(88, 166, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(88, 166, 255, 0.055);
+  padding: 10px;
+}
+
+.theme-bomb .scene-intent-box {
+  border-color: rgba(248, 81, 73, 0.22);
+  background: rgba(248, 81, 73, 0.06);
+}
+
+.scene-intent-box p {
+  margin: 0;
+  color: #8b949e;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .brief-chips {

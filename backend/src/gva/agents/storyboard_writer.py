@@ -28,8 +28,12 @@ def write_storyboard(script: VideoScript, settings: Settings, user_brief: str | 
                     "storytelling_notes": _storytelling_notes(settings.storytelling_mode),
                     "user_brief": user_brief or "",
                     "user_brief_rules": (
-                        "Use user_brief only to choose scene emphasis, rhythm, and visual priorities. "
-                        "Do not add unsupported facts, claims, features, commands, or demo behavior."
+                        "Treat user_brief as a high-priority signal for scene emphasis, rhythm, visual priorities, and ordering. "
+                        "If a requested emphasis is supported by the video_script or evidence, reflect it in at least one scene field "
+                        "(headline, caption, bullets, micro_beats, or scene order). "
+                        "Do not add unsupported facts, claims, features, commands, or demo behavior. "
+                        "For setup/install/onboarding convenience requests, use short visual keywords like easy onboarding or clear entry points; "
+                        "do not show specific install commands."
                     ),
                     "video_script": script.model_dump(),
                 },

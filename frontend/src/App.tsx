@@ -148,6 +148,8 @@ export function App() {
     if (Number.isFinite(runBombAgainCount) && runBombAgainCount >= 1) {
       setBombAgainCount(Math.min(8, Math.max(1, Math.round(runBombAgainCount))));
     }
+    const runUserBrief = run?.metadata.user_brief;
+    setUserBrief(typeof runUserBrief === 'string' ? runUserBrief : '');
   }, [run]);
 
   const selectedScene = useMemo(() => {
@@ -155,6 +157,10 @@ export function App() {
   }, [storyboard, selectedSceneId]);
   const selectedCaptionPreview = useMemo(
     () => (selectedScene ? captionPreviewForScene(selectedScene) : []),
+    [selectedScene],
+  );
+  const selectedVisualItems = useMemo(
+    () => (selectedScene ? visualItemsForScene(selectedScene) : []),
     [selectedScene],
   );
 
@@ -369,6 +375,7 @@ export function App() {
     try {
       const job = await api.rerenderJob(run.project_id, run.run_id, {
         render_profile: renderProfile,
+        user_brief: cleanUserBrief(userBrief) || undefined,
         brand_mode: brandMode,
         bomb_circle: bombCircle,
         bomb_again_count: bombAgainCount,
@@ -404,6 +411,28 @@ export function App() {
   function updateSelectedVisual(patch: Partial<Scene['visual']>) {
     if (!selectedScene) return;
     updateSelectedScene({visual: {...selectedScene.visual, ...patch}});
+  }
+
+  function updateSelectedVisualItems(items: string[]) {
+    if (!selectedScene) return;
+    const visual = {...selectedScene.visual};
+    if (usesDiagramNodes(selectedScene)) {
+      visual.diagram_nodes = items;
+    } else if (usesMicroBeats(selectedScene)) {
+      visual.micro_beats = items.map((text, index) => {
+        const previous = microBeatAt(visual.micro_beats, index);
+        return {
+          ...previous,
+          text,
+          kind: previous.kind || 'text',
+          start_ratio: typeof previous.start_ratio === 'number' ? previous.start_ratio : index * 0.18,
+        };
+      });
+      visual.bullets = items;
+    } else {
+      visual.bullets = items;
+    }
+    updateSelectedScene({visual});
   }
 
   async function addCustomScene() {
@@ -559,7 +588,6 @@ export function App() {
   const systemSummary = summarizeSystem(system);
   const headerMessage = progress.status === 'running' ? progress.message : message || 'Ready';
   const repoValidation = validateRepoUrl(repoUrl);
-  const inferredOutputName = inferOutputName(repoUrl);
 
   const bombHookPreview = buildBombHook(bombCircle, bombAgainCount);
 
@@ -611,14 +639,15 @@ export function App() {
               className="brief-input"
               value={userBrief}
               onChange={(event) => setUserBrief(event.target.value)}
-              placeholder="比如：更偏真实使用体验，少讲技术栈；强调开源推广；开头可以更有梗一点。"
+              placeholder="比如：更适合短视频；上手简单；突出真实结果。"
               maxLength={500}
+              rows={briefRows(userBrief)}
             />
             <span className="muted-copy">
-              生成新视频时生效。输出目录自动使用 {inferredOutputName || 'owner-repo'}。这里的内容只影响讲法和侧重点，不会当成项目事实。
+              生成新视频时会优先影响讲法和侧重点；选择历史 run 后生成新版，只会使用当前分镜编辑。
             </span>
             <div className="brief-chips" aria-label="快速添加侧重点">
-              {['真实使用体验', '技术流程', '开源推广', '少讲安装', '更适合短视频'].map((chip) => (
+              {['真实使用体验', '上手简单', '技术流程', '开源推广', '更适合短视频'].map((chip) => (
                 <button key={chip} type="button" onClick={() => setUserBrief(appendBriefChip(userBrief, chip))}>
                   {chip}
                 </button>
@@ -814,6 +843,20 @@ export function App() {
           <div className="section-title">当前 Scene</div>
           {selectedScene ? (
             <>
+              <div className="scene-intent-box">
+                <label>
+                  本次意图
+                  <textarea
+                    className="intent-input"
+                    value={userBrief}
+                    onChange={(event) => setUserBrief(event.target.value)}
+                    placeholder="比如：更适合短视频；上手简单；突出真实结果。"
+                    maxLength={500}
+                    rows={briefRows(userBrief)}
+                  />
+                </label>
+                <p>生成新视频会参与脚本和分镜；生成新版请直接改下面的画面和旁白字段。</p>
+              </div>
               <label>
                 标题
                 <input
@@ -839,18 +882,19 @@ export function App() {
                 />
               </label>
               <label>
-                画面关键词
+                {visualItemsLabel(selectedScene)}
                 <textarea
-                  value={selectedScene.visual.bullets.join('\n')}
+                  value={selectedVisualItems.join('\n')}
                   onChange={(event) =>
-                    updateSelectedVisual({
-                      bullets: event.target.value
+                    updateSelectedVisualItems(
+                      event.target.value
                         .split('\n')
                         .map((line) => line.trim())
                         .filter(Boolean),
-                    })
+                    )
                   }
                 />
+                <span className="muted-copy voice-hint">{visualItemsHint(selectedScene)}</span>
               </label>
               <label>
                 旁白
@@ -1474,6 +1518,66 @@ function validateRepoUrl(value: string): string {
   return '';
 }
 
+function briefRows(value: string): number {
+  const lineCount = value.split(/\r?\n/).length;
+  const visualLength = Array.from(value).length;
+  return Math.round(clampNumber(Math.max(2, lineCount + Math.floor(visualLength / 42)), 2, 5));
+}
+
+function visualItemsForScene(scene: Scene): string[] {
+  const diagramNodes = scene.visual.diagram_nodes ?? [];
+  const bullets = scene.visual.bullets ?? [];
+  if (usesDiagramNodes(scene) && diagramNodes.length) return diagramNodes;
+  if (usesMicroBeats(scene)) {
+    const beats = microBeatTexts(scene.visual.micro_beats);
+    if (beats.length) return beats;
+  }
+  if (bullets.length) return bullets;
+  if (diagramNodes.length) return diagramNodes;
+  return [];
+}
+
+function visualItemsLabel(scene: Scene): string {
+  if (usesDiagramNodes(scene)) return '画面流程节点';
+  if (usesMicroBeats(scene)) return '画面标签';
+  return '画面关键词';
+}
+
+function visualItemsHint(scene: Scene): string {
+  if (scene.visual.layout === 'github_hero') return '对应仓库卡片右侧的小标签，例如“真实仓库 / 证据校验”。';
+  if (usesDiagramNodes(scene)) return '对应流程图节点，可写成“标题：一句说明”。';
+  if (usesMicroBeats(scene)) return '对应画面中的亮点卡片或证据卡片。';
+  return '对应画面上的短关键词，完整解释放在旁白和底部字幕里。';
+}
+
+function usesDiagramNodes(scene: Scene): boolean {
+  return ['architecture_map', 'flow'].includes(scene.visual.layout);
+}
+
+function usesMicroBeats(scene: Scene): boolean {
+  if ((scene.visual.micro_beats ?? []).length > 0) return true;
+  return ['github_hero', 'feature_spotlight', 'evidence_grid'].includes(scene.visual.layout);
+}
+
+type EditableMicroBeat = {
+  text?: string;
+  kind?: string;
+  emphasis?: string | null;
+  start_ratio?: number;
+};
+
+function microBeatAt(value: unknown[] | undefined, index: number): EditableMicroBeat {
+  const candidate = value?.[index];
+  return candidate && typeof candidate === 'object' ? (candidate as EditableMicroBeat) : {};
+}
+
+function microBeatTexts(value: unknown[] | undefined): string[] {
+  return (value ?? [])
+    .map((item) => (item && typeof item === 'object' && 'text' in item ? String((item as {text?: unknown}).text ?? '') : ''))
+    .map((text) => text.trim())
+    .filter(Boolean);
+}
+
 function captionPreviewForScene(scene: Scene): Array<{start: number; end: number; text: string}> {
   const existing = scene.captions || [];
   if (existing.length) {
@@ -1556,18 +1660,6 @@ function cleanBombCircleInput(value: string): string {
 function clampAgainCount(value: number): number {
   if (!Number.isFinite(value)) return 1;
   return Math.max(1, Math.min(8, Math.round(value)));
-}
-
-function inferOutputName(repoUrl: string): string {
-  const match = repoUrl.trim().match(/^https:\/\/github\.com\/([^/\s]+)\/([^/\s#?]+?)(?:\.git)?(?:[/?#].*)?$/i);
-  if (!match) return '';
-  const owner = sanitizeName(match[1]);
-  const repo = sanitizeName(match[2]);
-  return owner && repo ? `${owner}-${repo}` : repo || owner;
-}
-
-function sanitizeName(value: string): string {
-  return value.replace(/\.git$/i, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 function summarizeVerification(verification: Record<string, unknown> | null): {

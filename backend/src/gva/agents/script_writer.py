@@ -77,8 +77,11 @@ def _build_insight_input(insight: ProjectInsight, settings: Settings, user_brief
             "storytelling_notes": _storytelling_notes(settings.storytelling_mode),
             "user_brief": user_brief or "",
             "user_brief_rules": (
-                "Use user_brief only to adjust tone, pacing, emphasis, and the ordering of supported points. "
-                "Do not treat it as evidence and do not add project capabilities that are absent from project_insight."
+                "Treat user_brief as a high-priority preference for tone, pacing, emphasis, and ordering. "
+                "If a requested emphasis is supported by project_insight or evidence, reflect it in at least one segment. "
+                "Do not treat it as evidence and do not add project capabilities that are absent from project_insight. "
+                "For setup/install/onboarding convenience requests, use high-level wording like easy onboarding or clear entry points; "
+                "do not invent commands or claim zero configuration unless evidence supports it."
             ),
             "project_insight": insight.model_dump(),
         },
