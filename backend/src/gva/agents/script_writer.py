@@ -13,12 +13,12 @@ from gva.models.script import VideoScript
 PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "script_writer.md"
 
 
-def write_script(insight: ProjectInsight, settings: Settings) -> VideoScript:
+def write_script(insight: ProjectInsight, settings: Settings, user_brief: str | None = None) -> VideoScript:
     client = build_openai_client(settings)
     prompt = PROMPT_PATH.read_text(encoding="utf-8")
     messages = [
         {"role": "system", "content": prompt},
-        {"role": "user", "content": _build_insight_input(insight, settings)},
+        {"role": "user", "content": _build_insight_input(insight, settings, user_brief)},
     ]
     model = get_generation_model(settings)
     try:
@@ -68,13 +68,18 @@ def render_script_markdown(script: VideoScript) -> str:
     return "\n".join(lines)
 
 
-def _build_insight_input(insight: ProjectInsight, settings: Settings) -> str:
+def _build_insight_input(insight: ProjectInsight, settings: Settings, user_brief: str | None = None) -> str:
     return json.dumps(
         {
             "video_mode": settings.video_mode,
             "mode_notes": _mode_notes(settings.video_mode),
             "storytelling_mode": settings.storytelling_mode,
             "storytelling_notes": _storytelling_notes(settings.storytelling_mode),
+            "user_brief": user_brief or "",
+            "user_brief_rules": (
+                "Use user_brief only to adjust tone, pacing, emphasis, and the ordering of supported points. "
+                "Do not treat it as evidence and do not add project capabilities that are absent from project_insight."
+            ),
             "project_insight": insight.model_dump(),
         },
         ensure_ascii=False,

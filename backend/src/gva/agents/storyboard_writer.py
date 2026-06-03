@@ -13,7 +13,7 @@ from gva.models.storyboard import Storyboard
 PROMPT_PATH = Path(__file__).resolve().parents[1] / "prompts" / "storyboard_writer.md"
 
 
-def write_storyboard(script: VideoScript, settings: Settings) -> Storyboard:
+def write_storyboard(script: VideoScript, settings: Settings, user_brief: str | None = None) -> Storyboard:
     client = build_openai_client(settings)
     prompt = PROMPT_PATH.read_text(encoding="utf-8")
     messages = [
@@ -26,6 +26,11 @@ def write_storyboard(script: VideoScript, settings: Settings) -> Storyboard:
                     "mode_notes": _mode_notes(settings.video_mode),
                     "storytelling_mode": settings.storytelling_mode,
                     "storytelling_notes": _storytelling_notes(settings.storytelling_mode),
+                    "user_brief": user_brief or "",
+                    "user_brief_rules": (
+                        "Use user_brief only to choose scene emphasis, rhythm, and visual priorities. "
+                        "Do not add unsupported facts, claims, features, commands, or demo behavior."
+                    ),
                     "video_script": script.model_dump(),
                 },
                 ensure_ascii=False,

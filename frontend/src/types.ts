@@ -73,6 +73,7 @@ export interface ProjectItem {
 export interface WorkflowRequest {
   repo_url: string;
   output_name?: string;
+  user_brief?: string;
   out_dir?: string;
   video_mode: VideoMode;
   storytelling_mode?: 'experience_first' | 'technical_explainer';

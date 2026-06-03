@@ -65,8 +65,7 @@ interface ClipRange {
 export function App() {
   const [repoUrl, setRepoUrl] = useState('https://github.com/conrad-strange/repo-to-shorts');
   const [repoUrlTouched, setRepoUrlTouched] = useState(false);
-  const [outputName, setOutputName] = useState('conrad-strange-repo-to-shorts');
-  const [outputNameTouched, setOutputNameTouched] = useState(false);
+  const [userBrief, setUserBrief] = useState('');
   const [videoMode, setVideoMode] = useState<VideoMode>('short_30s');
   const [renderProfile, setRenderProfile] = useState<RenderProfile>('preview');
   const [brandMode, setBrandMode] = useState<BrandMode>('rs');
@@ -151,14 +150,6 @@ export function App() {
     }
   }, [run]);
 
-  useEffect(() => {
-    if (outputNameTouched) return;
-    const inferred = inferOutputName(repoUrl);
-    if (inferred) {
-      setOutputName(inferred);
-    }
-  }, [repoUrl, outputNameTouched]);
-
   const selectedScene = useMemo(() => {
     return storyboard?.scenes.find((scene) => scene.id === selectedSceneId) ?? storyboard?.scenes[0] ?? null;
   }, [storyboard, selectedSceneId]);
@@ -190,18 +181,13 @@ export function App() {
       setMessage(repoValidation);
       return;
     }
-    if (outputNameValidation) {
-      setProgress(errorProgress(outputNameValidation));
-      setMessage(outputNameValidation);
-      return;
-    }
     setBusy(true);
     setProgress(startProgress(0));
     setMessage('开始生成视频...');
     try {
       const result = await api.createProject({
         repo_url: repoUrl,
-        output_name: outputName || undefined,
+        user_brief: cleanUserBrief(userBrief) || undefined,
         video_mode: videoMode,
         storytelling_mode: 'experience_first',
         render_strategy: 'remotion-primary',
@@ -233,18 +219,13 @@ export function App() {
       setMessage(repoValidation);
       return;
     }
-    if (outputNameValidation) {
-      setProgress(errorProgress(outputNameValidation));
-      setMessage(outputNameValidation);
-      return;
-    }
     setBusy(true);
     setProgress(startProgress(0));
     setMessage('正在提交后台生成任务...');
     try {
       const job = await api.createJob({
         repo_url: repoUrl,
-        output_name: outputName || undefined,
+        user_brief: cleanUserBrief(userBrief) || undefined,
         video_mode: videoMode,
         storytelling_mode: 'experience_first',
         render_strategy: 'remotion-primary',
@@ -574,7 +555,7 @@ export function App() {
   const systemSummary = summarizeSystem(system);
   const headerMessage = progress.status === 'running' ? progress.message : message || 'Ready';
   const repoValidation = validateRepoUrl(repoUrl);
-  const outputNameValidation = validateOutputName(outputName);
+  const inferredOutputName = inferOutputName(repoUrl);
 
   const bombHookPreview = buildBombHook(bombCircle, bombAgainCount);
 
@@ -621,16 +602,24 @@ export function App() {
             {repoUrlTouched && repoValidation ? <span className="field-error">{repoValidation}</span> : null}
           </label>
           <label>
-            输出名
-            <input
-              value={outputName}
-              onChange={(event) => {
-                setOutputNameTouched(true);
-                setOutputName(event.target.value);
-              }}
-              aria-invalid={Boolean(outputNameValidation)}
+            想突出什么？
+            <textarea
+              className="brief-input"
+              value={userBrief}
+              onChange={(event) => setUserBrief(event.target.value)}
+              placeholder="比如：更偏真实使用体验，少讲技术栈；强调开源推广；开头可以更有梗一点。"
+              maxLength={500}
             />
-            {outputNameValidation ? <span className="field-error">{outputNameValidation}</span> : null}
+            <span className="muted-copy">
+              生成新视频时生效。输出目录自动使用 {inferredOutputName || 'owner-repo'}。这里的内容只影响讲法和侧重点，不会当成项目事实。
+            </span>
+            <div className="brief-chips" aria-label="快速添加侧重点">
+              {['真实使用体验', '技术流程', '开源推广', '少讲安装', '更适合短视频'].map((chip) => (
+                <button key={chip} type="button" onClick={() => setUserBrief(appendBriefChip(userBrief, chip))}>
+                  {chip}
+                </button>
+              ))}
+            </div>
           </label>
         </section>
 
@@ -688,7 +677,7 @@ export function App() {
             Dry run
             <InfoTip text="只生成脚本和分镜，不渲染视频。" />
           </label>
-          <button className="primary" disabled={busy || Boolean(repoValidation) || Boolean(outputNameValidation)} onClick={startWorkflowJob}>
+          <button className="primary" disabled={busy || Boolean(repoValidation)} onClick={startWorkflowJob}>
             {busy ? '运行中...' : '生成视频'}
           </button>
         </section>
@@ -1461,13 +1450,15 @@ function validateRepoUrl(value: string): string {
   return '';
 }
 
-function validateOutputName(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return '输出名不能为空。';
-  if (!/^[A-Za-z0-9._-]+$/.test(trimmed)) {
-    return '输出名只能包含字母、数字、点、下划线和短横线。';
-  }
-  return '';
+function cleanUserBrief(value: string): string {
+  return value.replace(/[<>{}[\]|\\^`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 500);
+}
+
+function appendBriefChip(current: string, chip: string): string {
+  const cleaned = cleanUserBrief(current);
+  if (!cleaned) return chip;
+  if (cleaned.includes(chip)) return cleaned;
+  return `${cleaned}；${chip}`;
 }
 
 function buildBombHook(circle: string, againCount: number): string {

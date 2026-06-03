@@ -38,6 +38,7 @@ BrandMode = Literal["rs", "rb"]
 class WorkflowRequest(BaseModel):
     repo_url: str
     output_name: str | None = None
+    user_brief: str | None = None
     out_dir: str | None = None
     video_mode: VideoMode = "short_30s"
     storytelling_mode: str = "experience_first"
@@ -366,6 +367,7 @@ def _run_workflow_payload(
         repo_url=request.repo_url,
         output_dir=root_output_dir,
         settings=settings,
+        user_brief=request.user_brief,
         dry_run=request.dry_run,
         force_insight=request.force_insight,
         force_script=request.force_script,
@@ -414,6 +416,7 @@ def _rerender_payload(
         repo_url=repo_url,
         output_dir=root_output_dir,
         settings=settings,
+        user_brief=metadata.get("user_brief"),
         dry_run=False,
         force_tts=True,
         force_render=True,
@@ -699,9 +702,14 @@ def _resolve_output_root(request: WorkflowRequest, settings: Settings) -> Path:
 
 
 def _slug_from_source(source: str) -> str:
-    cleaned = source.rstrip("/").replace("\\", "/").split("/")[-1] or "demo"
-    if cleaned.endswith(".git"):
-        cleaned = cleaned[:-4]
+    normalized = source.rstrip("/").replace("\\", "/")
+    match = re.match(r"^https://github\.com/([^/\s]+)/([^/\s#?]+?)(?:\.git)?(?:[/?#].*)?$", normalized, re.I)
+    if match:
+        cleaned = f"{match.group(1)}-{match.group(2)}"
+    else:
+        cleaned = normalized.split("/")[-1] or "demo"
+        if cleaned.endswith(".git"):
+            cleaned = cleaned[:-4]
     return re.sub(r"[^a-zA-Z0-9._-]+", "-", cleaned).strip("-") or "demo"
 
 

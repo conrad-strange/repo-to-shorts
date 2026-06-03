@@ -482,6 +482,40 @@ label {
   font-size: 11px;
 }
 
+.brief-input {
+  min-height: 96px;
+  line-height: 1.55;
+}
+
+.brief-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.brief-chips button {
+  border-radius: 999px;
+  border-color: rgba(88, 166, 255, 0.28);
+  background: rgba(88, 166, 255, 0.08);
+  color: #c9d1d9;
+  font-size: 11px;
+  padding: 5px 9px;
+}
+
+.brief-chips button:hover {
+  border-color: rgba(88, 166, 255, 0.55);
+  color: #f0f6fc;
+}
+
+.theme-bomb .brief-chips button {
+  border-color: rgba(255, 184, 108, 0.28);
+  background: rgba(248, 81, 73, 0.09);
+}
+
+.theme-bomb .brief-chips button:hover {
+  border-color: rgba(255, 184, 108, 0.55);
+}
+
 .scene-tool-head {
   align-items: center;
   display: grid;

@@ -39,6 +39,45 @@ def test_extract_readme_evidence_finds_title_intro_and_highlights() -> None:
     assert evidence.highlights == ["Reads local papers and builds a searchable index."]
 
 
+def test_extract_readme_evidence_cleans_html_and_generic_headings() -> None:
+    summary = RepoSummary(
+        source="demo",
+        repo_name="repo-to-shorts",
+        files=[
+            RepoFile(
+                path="README.md",
+                role="readme",
+                language="Markdown",
+                excerpt=(
+                    '<h1 align="center">Repo to Shorts</h1>\n\n'
+                    '<p align="center">\n'
+                    "  输入一个公开 GitHub 仓库，生成中文 9:16 项目讲解短视频。\n"
+                    "</p>\n\n"
+                    '<p align="center"><img alt="Python" src="badge.svg"></p>\n\n'
+                    "## What It Does\n\n"
+                    "Repo to Shorts 是一个面向开源开发者的 AI 视频生成工具。\n\n"
+                    "## Features\n\n"
+                    "<table>\n"
+                    "<tr><td><strong>GitHub 输入</strong></td></tr>\n"
+                    "<tr><td><strong>证据链</strong></td></tr>\n"
+                    "</table>\n"
+                ),
+                size=420,
+            )
+        ],
+        tree_overview="README.md",
+    )
+
+    evidence = extract_readme_evidence(summary)
+
+    assert evidence.title == "Repo to Shorts"
+    assert evidence.intro == "输入一个公开 GitHub 仓库，生成中文 9:16 项目讲解短视频。"
+    assert "What It Does" not in evidence.sections
+    assert "Features" not in evidence.sections
+    assert "GitHub 输入" in evidence.highlights
+    assert "证据链" in evidence.highlights
+
+
 def test_prepare_visual_assets_annotates_storyboard_on_screenshot_success(tmp_path, monkeypatch) -> None:
     def fake_run(command, **kwargs):
         screenshot_arg = next(item for item in command if str(item).startswith("--screenshot="))

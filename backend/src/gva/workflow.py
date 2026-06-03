@@ -37,6 +37,7 @@ def run_render_workflow(
     repo_url: str | None,
     output_dir: Path,
     settings: Settings,
+    user_brief: str | None = None,
     target_duration_seconds: int | None = None,
     dry_run: bool = True,
     force_insight: bool = False,
@@ -54,6 +55,7 @@ def run_render_workflow(
     repo scan -> project insight -> script -> storyboard -> verification.
     """
     _apply_brand_defaults(settings)
+    user_brief = _normalize_user_brief(user_brief)
     _emit_progress(progress_callback, "repo", "读取 GitHub 仓库", 5)
     project_path = resolve_project_source(project_path, repo_url, settings.repo_cache_dir)
     root_output_dir = output_dir.resolve()
@@ -83,6 +85,7 @@ def run_render_workflow(
         "run_id": run_info.run_id,
         "run_dir": str(output_dir),
         "repo_url": repo_url,
+        "user_brief": user_brief,
         "target_duration_seconds": target_duration_seconds,
         "dry_run": dry_run,
         "tts_provider": settings.tts_provider,
@@ -103,6 +106,7 @@ def run_render_workflow(
         "detected_stack": repo_summary.detected_stack,
         "selected_files": len(repo_summary.files),
     }
+    _write_user_intent(output_dir, user_brief, settings)
     llm_error = llm_settings_error(settings)
     has_llm_key = llm_error is None
     if llm_error:
@@ -135,7 +139,7 @@ def run_render_workflow(
 
             script = VideoScript.model_validate_json(script_path.read_text(encoding="utf-8"))
         else:
-            script = write_script(insight, settings)
+            script = write_script(insight, settings, user_brief=user_brief)
             _attach_script_evidence_refs(script, evidence_index)
             script_path.write_text(
                 script.model_dump_json(indent=2),
@@ -166,7 +170,7 @@ def run_render_workflow(
 
             storyboard = Storyboard.model_validate_json(storyboard_path.read_text(encoding="utf-8"))
         else:
-            storyboard = write_storyboard(script, settings)
+            storyboard = write_storyboard(script, settings, user_brief=user_brief)
             _attach_storyboard_evidence_refs(storyboard, script, evidence_index)
             storyboard_raw_path.write_text(
                 storyboard.model_dump_json(indent=2),
@@ -516,8 +520,8 @@ def _apply_bomb_mode_to_storyboard(storyboard, settings: Settings, repo_url: str
         first.visual.repo_display_url = repo_url.replace("https://", "")
         changed = True
     bomb_beats = [
-        MicroBeat(text="爆点开场", kind="warning", emphasis="hook", start_ratio=0.08),
-        MicroBeat(text="真实仓库", kind="text", emphasis="evidence", start_ratio=0.34),
+        MicroBeat(text="真实仓库", kind="warning", emphasis="evidence", start_ratio=0.08),
+        MicroBeat(text="证据校验", kind="text", emphasis="evidence", start_ratio=0.34),
         MicroBeat(text="看完再 Star", kind="cta", emphasis="github", start_ratio=0.62),
     ]
     if [beat.text for beat in first.visual.micro_beats[:3]] != [beat.text for beat in bomb_beats]:
@@ -537,6 +541,30 @@ def _apply_brand_defaults(settings: Settings) -> None:
         settings.tts_voice = settings.rb_tts_voice
     if not settings.tts_rate or settings.tts_rate in {"+0%", "+25%"}:
         settings.tts_rate = settings.rb_tts_rate
+
+
+def _normalize_user_brief(value: str | None) -> str:
+    cleaned = re.sub(r"[<>{}\[\]|\\^`]", "", str(value or ""))
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned[:500]
+
+
+def _write_user_intent(output_dir: Path, user_brief: str, settings: Settings) -> None:
+    intent = {
+        "raw_text": user_brief,
+        "source": "web_user_brief" if user_brief else "default",
+        "rules": [
+            "User brief may adjust tone, pacing, focus, and scene emphasis.",
+            "User brief is not evidence and must not introduce unsupported project facts.",
+        ],
+        "video_mode": settings.video_mode,
+        "storytelling_mode": settings.storytelling_mode,
+        "brand_mode": settings.brand_mode,
+    }
+    (output_dir / "user-intent.json").write_text(
+        json.dumps(intent, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 def _bomb_hook_text(settings: Settings) -> str:

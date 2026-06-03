@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import html
 import re
 import shutil
 import subprocess
@@ -103,13 +104,23 @@ def extract_readme_evidence(repo_summary: RepoSummary) -> ReadmeEvidence:
             continue
         if in_code_block:
             continue
-        if stripped.startswith("#") and not title:
-            title = stripped.lstrip("#").strip()
+        html_heading = _extract_html_heading(stripped)
+        if html_heading:
+            level, heading = html_heading
+            if level == 1 and not title:
+                title = heading
+            elif heading and not _looks_like_setup_text(heading) and not _is_generic_readme_heading(heading):
+                sections.append(heading)
             continue
+
         if stripped.startswith("##"):
-            section = stripped.lstrip("#").strip()
-            if section and not _looks_like_setup_text(section):
+            section = _strip_markdown(stripped.lstrip("#").strip())
+            if section and not _looks_like_setup_text(section) and not _is_generic_readme_heading(section):
                 sections.append(section)
+            continue
+
+        if stripped.startswith("#") and not title:
+            title = _strip_markdown(stripped.lstrip("#").strip())
             continue
 
         highlight = _extract_readme_highlight(stripped)
@@ -118,7 +129,12 @@ def extract_readme_evidence(repo_summary: RepoSummary) -> ReadmeEvidence:
 
         if not intro and stripped and not stripped.startswith("#") and not stripped.startswith(("!", "[")):
             candidate = _strip_markdown(stripped)
-            if candidate and not _looks_like_setup_text(candidate) and not _looks_like_command(candidate):
+            if (
+                candidate
+                and not _looks_like_setup_text(candidate)
+                and not _looks_like_command(candidate)
+                and not _is_generic_readme_heading(candidate)
+            ):
                 intro = candidate
 
     return ReadmeEvidence(title=title, intro=intro, highlights=highlights[:5], sections=sections[:8])
@@ -417,7 +433,7 @@ def _compact_visual_language(storyboard: Storyboard) -> None:
         scene.visual.headline = _short_headline(scene.visual.headline)
         scene.visual.bullets = [_short_phrase(item, 24) for item in scene.visual.bullets[:3]]
         scene.visual.micro_beats = [
-            beat.model_copy(update={"text": _short_phrase(beat.text, 24)})
+            beat.model_copy(update={"text": _short_phrase(_viewer_facing_beat_text(beat.text), 24)})
             for beat in (scene.visual.micro_beats or [])[:4]
             if beat.text.strip()
         ]
@@ -497,12 +513,20 @@ def _is_setup_or_command(text: str) -> bool:
 def _extract_readme_highlight(line: str) -> str | None:
     if not line or _looks_like_setup_text(line) or _looks_like_command(line):
         return None
-    if not line.startswith(("- ", "* ", "+ ")):
+    is_list_item = line.startswith(("- ", "* ", "+ "))
+    is_table_label = bool(re.search(r"<td>\s*<strong>", line, re.I))
+    if not is_list_item and not is_table_label:
         return None
-    cleaned = _strip_markdown(line[2:].strip())
-    if not cleaned or _looks_like_setup_text(cleaned) or _looks_like_command(cleaned):
+    raw = line[2:].strip() if is_list_item else line
+    cleaned = _strip_markdown(raw)
+    if (
+        not cleaned
+        or _looks_like_setup_text(cleaned)
+        or _looks_like_command(cleaned)
+        or _is_generic_readme_heading(cleaned)
+    ):
         return None
-    if len(cleaned) < 8:
+    if len(cleaned) < 2:
         return None
     return cleaned[:90]
 
@@ -536,9 +560,62 @@ def _looks_like_setup_text(text: str) -> bool:
 
 
 def _strip_markdown(text: str) -> str:
+    text = html.unescape(text)
+    text = re.sub(r"<img\b[^>]*>", " ", text, flags=re.I)
+    text = re.sub(r"</?(?:h[1-6]|p|div|span|table|thead|tbody|tr|td|th|strong|em|br|center)[^>]*>", " ", text, flags=re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"`([^`]+)`", r"\1", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
-    return text.strip("*_> ")[:160]
+    text = re.sub(r"\s+", " ", text)
+    return text.strip("*_>|- ")[:160]
+
+
+def _viewer_facing_beat_text(text: str) -> str:
+    replacements = {
+        "爆点开场": "真实仓库",
+        "hook": "看点",
+        "Hook": "看点",
+    }
+    cleaned = text.strip()
+    return replacements.get(cleaned, cleaned)
+
+
+def _extract_html_heading(text: str) -> tuple[int, str] | None:
+    match = re.match(r"<h([1-6])\b[^>]*>(.*?)</h\1>", text.strip(), re.I | re.S)
+    if not match:
+        return None
+    heading = _strip_markdown(match.group(2))
+    return int(match.group(1)), heading
+
+
+def _is_generic_readme_heading(text: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", " ", text.lower()).strip()
+    normalized = re.sub(r"^\d+\s+", "", normalized)
+    generic = {
+        "what it does",
+        "features",
+        "quick start",
+        "quickstart",
+        "usage",
+        "demo",
+        "roadmap",
+        "license",
+        "examples",
+        "installation",
+        "requirements",
+        "project structure",
+        "python",
+        "llm provider",
+        "web ui",
+        "cli",
+        "output",
+        "功能特点",
+        "快速开始",
+        "使用方式",
+        "项目路线",
+        "许可证",
+    }
+    return normalized in generic
 
 
 def _compact_readme_intro(text: str | None) -> str | None:
