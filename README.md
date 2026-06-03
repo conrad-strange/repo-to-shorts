@@ -31,6 +31,20 @@ GitHub Repo
   -> 9:16 MP4
 ```
 
+## Preview
+
+<p align="center">
+  <img src="docs/assets/web-ui.png" alt="Repo to Shorts Web UI" width="900">
+</p>
+
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="Generated short video demo" width="320">
+</p>
+
+<p align="center">
+  <img src="docs/assets/preview_grid.jpg" alt="Generated video preview frames" width="720">
+</p>
+
 ## Features
 
 <table>
