@@ -14,7 +14,7 @@ from rich.table import Table
 from gva.config import Settings
 from gva.agents.evaluator import evaluate_output
 from gva.core.llm_client import llm_settings_error, normalize_llm_provider, has_real_api_key
-from gva.core.render_bridge import find_ffmpeg, find_node, find_npm
+from gva.core.render_bridge import find_browser, find_ffmpeg, find_node, find_npm
 from gva.core.runs import clean_old_runs, list_run_ids, resolve_run_dir
 from gva.workflow import run_render_workflow
 
@@ -224,9 +224,9 @@ def doctor_command() -> None:
     ffmpeg_path, ffmpeg_detail = _tool_detail(lambda: find_ffmpeg(settings), ["-version"], first_line=True)
     checks.append(("FFmpeg", bool(ffmpeg_path), ffmpeg_detail, "Install FFmpeg or run scripts/install-portable-tools.ps1.", True))
 
-    chrome = settings.chrome_exe.resolve() if settings.chrome_exe else None
-    chrome_ok = bool(chrome and chrome.exists())
-    checks.append(("Chrome", chrome_ok, "Configured" if chrome_ok else "Optional", "Optional. Used for GitHub screenshots.", False))
+    browser = find_browser(settings)
+    browser_detail = f"{browser.stem} found" if browser else "Optional"
+    checks.append(("Browser", bool(browser), browser_detail, "Optional. Chrome or Edge is used for GitHub screenshots.", False))
 
     frontend_dir = settings.frontend_dir.resolve()
     renderer_dir = settings.renderer_dir.resolve()

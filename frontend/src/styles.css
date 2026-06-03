@@ -1124,9 +1124,10 @@ label {
 
 .preview-layout {
   display: grid;
-  grid-template-columns: minmax(240px, 340px) minmax(260px, 1fr);
+  grid-template-columns: minmax(330px, 430px) minmax(190px, 300px);
   gap: 14px;
   align-items: start;
+  justify-content: start;
   min-height: 0;
 }
 
@@ -1134,7 +1135,7 @@ label {
   display: grid;
   position: sticky;
   top: 14px;
-  width: min(100%, 340px);
+  width: min(100%, 430px);
   aspect-ratio: 9 / 16;
   place-items: center;
   overflow: hidden;
@@ -1169,6 +1170,7 @@ label {
 .storyboard-strip {
   display: grid;
   gap: 8px;
+  max-width: 300px;
 }
 
 .scene-card {
@@ -1470,12 +1472,12 @@ label {
   }
 
   .preview-layout {
-    grid-template-columns: minmax(220px, 320px) minmax(220px, 1fr);
+    grid-template-columns: minmax(300px, 380px) minmax(180px, 260px);
     gap: 12px;
   }
 
   .phone-frame {
-    width: min(100%, 320px);
+    width: min(100%, 380px);
     border-radius: 28px;
   }
 

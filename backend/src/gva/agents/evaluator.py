@@ -107,7 +107,7 @@ def evaluate_output(output_dir: Path, settings: Settings) -> EvaluationReport:
                     severity="low",
                     category="visual",
                     message="GitHub screenshot asset was not generated.",
-                    suggestion="Check CHROME_EXE or network access; the render should fall back to text scenes.",
+                    suggestion="Check BROWSER_EXE/CHROME_EXE or network access; the render should fall back to text scenes.",
                 )
             )
 

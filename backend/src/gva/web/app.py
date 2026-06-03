@@ -23,7 +23,7 @@ from git.exc import GitCommandError
 from pydantic import BaseModel, Field
 
 from gva.config import Settings
-from gva.core.render_bridge import find_ffmpeg
+from gva.core.render_bridge import find_browser, find_ffmpeg
 from gva.core.runs import allocate_run, list_run_ids, resolve_run_dir
 from gva.core.tts import _synthesize_edge_tts
 from gva.models.storyboard import Storyboard
@@ -113,9 +113,19 @@ def create_app(frontend_dist: Path | None = None) -> FastAPI:
     def health() -> dict[str, Any]:
         return {"ok": True}
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> FileResponse:
+        icon_path = (frontend_dist or _default_frontend_dist()) / "favicon.svg"
+        if not icon_path.exists():
+            icon_path = Settings().frontend_dir.resolve() / "public" / "favicon.svg"
+        if not icon_path.exists():
+            raise HTTPException(status_code=404, detail="favicon not found")
+        return FileResponse(icon_path, media_type="image/svg+xml")
+
     @app.get("/api/system")
     def system_status() -> dict[str, Any]:
         settings = Settings()
+        browser = find_browser(settings)
         return {
             "node": _node_status(settings),
             "tools": {
@@ -123,6 +133,7 @@ def create_app(frontend_dist: Path | None = None) -> FastAPI:
                 "frontend_dir": str(settings.frontend_dir.resolve()),
                 "outputs_dir": str(settings.outputs_dir.resolve()),
                 "ffmpeg_exe": _path_status(settings.ffmpeg_exe),
+                "browser_exe": _path_status(browser),
                 "chrome_exe": _path_status(settings.chrome_exe),
             },
             "vite": {

@@ -1561,7 +1561,7 @@ function summarizeSystem(system: Record<string, unknown> | null): Array<{
     return [
       {label: 'Node', value: '检测中', ok: false, optional: true},
       {label: 'FFmpeg', value: '检测中', ok: false, optional: true},
-      {label: 'Chrome', value: '检测中', ok: false, optional: true},
+      {label: 'Browser', value: '检测中', ok: false, optional: true},
       {label: 'Renderer', value: '检测中', ok: false, optional: true},
     ];
   }
@@ -1571,14 +1571,15 @@ function summarizeSystem(system: Record<string, unknown> | null): Array<{
   const nodeOk = candidates.some((candidate) => candidate.ok_for_vite === true);
   const tools = (system.tools as Record<string, unknown> | undefined) ?? {};
   const ffmpeg = tools.ffmpeg_exe as Record<string, unknown> | undefined;
-  const chrome = tools.chrome_exe as Record<string, unknown> | undefined;
+  const browser = tools.browser_exe as Record<string, unknown> | undefined;
+  const chrome = (browser?.exists ? browser : tools.chrome_exe) as Record<string, unknown> | undefined;
   const rendererDir = tools.renderer_dir;
 
   return [
     {label: 'Node', value: nodeOk ? 'OK' : '异常', ok: nodeOk},
     {label: 'FFmpeg', value: ffmpeg?.exists ? 'OK' : '未配置', ok: Boolean(ffmpeg?.exists)},
     {
-      label: 'Chrome',
+      label: 'Browser',
       value: chrome?.exists ? 'OK' : '未配置',
       ok: Boolean(chrome?.exists),
       optional: !chrome?.exists,

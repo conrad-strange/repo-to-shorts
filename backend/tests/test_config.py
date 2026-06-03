@@ -12,6 +12,7 @@ def test_settings_treats_empty_optional_values_as_none(tmp_path: Path) -> None:
                 "NODE_EXE=",
                 "NPM_CMD=",
                 "FFMPEG_EXE=",
+                "BROWSER_EXE=",
                 "CHROME_EXE=",
             ]
         ),
@@ -24,4 +25,5 @@ def test_settings_treats_empty_optional_values_as_none(tmp_path: Path) -> None:
     assert settings.node_exe is None
     assert settings.npm_cmd is None
     assert settings.ffmpeg_exe is None
+    assert settings.browser_exe is None
     assert settings.chrome_exe is None

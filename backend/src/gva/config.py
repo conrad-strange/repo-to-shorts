@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     node_exe: Optional[Path] = None
     npm_cmd: Optional[Path] = None
     ffmpeg_exe: Optional[Path] = None
+    browser_exe: Optional[Path] = None
     chrome_exe: Optional[Path] = None
 
     @field_validator("remotion_concurrency", mode="before")
@@ -58,7 +59,7 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("node_exe", "npm_cmd", "ffmpeg_exe", "chrome_exe", mode="before")
+    @field_validator("node_exe", "npm_cmd", "ffmpeg_exe", "browser_exe", "chrome_exe", mode="before")
     @classmethod
     def _empty_path_as_none(cls, value: Any) -> Any:
         if isinstance(value, str) and not value.strip():

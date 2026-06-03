@@ -117,7 +117,8 @@ def test_prepare_visual_assets_annotates_storyboard_on_screenshot_success(tmp_pa
     assert (tmp_path / "out" / "logs" / "visual-assets-manifest.json").exists()
 
 
-def test_prepare_visual_assets_falls_back_when_chrome_missing(tmp_path) -> None:
+def test_prepare_visual_assets_falls_back_when_chrome_missing(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(visual_assets, "find_browser", lambda _settings: None)
     settings = Settings(chrome_exe=tmp_path / "missing.exe")
     summary = RepoSummary(source="demo", repo_name="demo", files=[], tree_overview="")
     storyboard = Storyboard(

@@ -66,7 +66,7 @@ def render_video(output_dir: Path, settings: Settings) -> Path:
     renderer_dir = settings.renderer_dir.resolve()
     node = find_node(settings)
     ffmpeg = find_ffmpeg(settings)
-    chrome = _optional_existing_path(settings.chrome_exe)
+    browser = find_browser(settings)
     remotion_cli = renderer_dir / "node_modules" / "@remotion" / "cli" / "remotion-cli.js"
     if not remotion_cli.exists():
         raise FileNotFoundError(f"Remotion CLI does not exist: {remotion_cli}")
@@ -97,8 +97,8 @@ def render_video(output_dir: Path, settings: Settings) -> Path:
     ]
     if render_scale != 1:
         command.extend(["--scale", str(render_scale)])
-    if chrome:
-        command.extend(["--browser-executable", str(chrome)])
+    if browser:
+        command.extend(["--browser-executable", str(browser)])
     if settings.remotion_concurrency and settings.remotion_concurrency > 0:
         command.extend(["--concurrency", str(settings.remotion_concurrency)])
 
@@ -121,6 +121,35 @@ def find_npm(settings: Settings) -> Path:
 
 def find_ffmpeg(settings: Settings) -> Path:
     return _find_tool(settings.ffmpeg_exe, "FFMPEG_EXE", "**/ffmpeg.exe", ["ffmpeg.exe", "ffmpeg"])
+
+
+def find_browser(settings: Settings) -> Path | None:
+    """Find an optional Chromium-family browser for screenshots and Remotion."""
+    candidates: list[Path] = []
+    if settings.browser_exe:
+        candidates.append(settings.browser_exe)
+    if settings.chrome_exe:
+        candidates.append(settings.chrome_exe)
+    candidates.extend(_default_browser_candidates())
+    for executable in ["chrome.exe", "msedge.exe", "chrome", "msedge", "google-chrome", "chromium"]:
+        found = shutil.which(executable)
+        if found:
+            candidates.append(Path(found))
+    candidates.extend(_registry_browser_candidates())
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        key = str(resolved).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if resolved.exists() and resolved.is_file():
+            return resolved
+    return None
 
 
 def _storyboard_for_render(storyboard: Storyboard, render_profile: str) -> Storyboard:
@@ -162,3 +191,54 @@ def _optional_existing_path(path: Path | None) -> Path | None:
         return None
     resolved = path.resolve()
     return resolved if resolved.exists() else None
+
+
+def _default_browser_candidates() -> list[Path]:
+    if os.name != "nt":
+        return []
+
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    local_app_data = os.environ.get("LocalAppData")
+    candidates = [
+        Path(program_files) / "Google" / "Chrome" / "Application" / "chrome.exe",
+        Path(program_files_x86) / "Google" / "Chrome" / "Application" / "chrome.exe",
+        Path(program_files) / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+        Path(program_files_x86) / "Microsoft" / "Edge" / "Application" / "msedge.exe",
+    ]
+    if local_app_data:
+        candidates.append(Path(local_app_data) / "Google" / "Chrome" / "Application" / "chrome.exe")
+        candidates.append(Path(local_app_data) / "Microsoft" / "Edge" / "Application" / "msedge.exe")
+    return candidates
+
+
+def _registry_browser_candidates() -> list[Path]:
+    if os.name != "nt":
+        return []
+    try:
+        import winreg
+    except ImportError:
+        return []
+
+    candidates: list[Path] = []
+    app_paths = [
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe",
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\msedge.exe",
+    ]
+    roots = [winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE]
+    views = [0]
+    for view in ["KEY_WOW64_64KEY", "KEY_WOW64_32KEY"]:
+        if hasattr(winreg, view):
+            views.append(getattr(winreg, view))
+
+    for root in roots:
+        for app_path in app_paths:
+            for view in views:
+                try:
+                    with winreg.OpenKey(root, app_path, 0, winreg.KEY_READ | view) as key:
+                        value, _ = winreg.QueryValueEx(key, "")
+                except OSError:
+                    continue
+                if value:
+                    candidates.append(Path(value))
+    return candidates

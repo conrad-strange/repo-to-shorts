@@ -9,6 +9,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from gva.config import Settings
+from gva.core.render_bridge import find_browser
 from gva.models.repo import RepoSummary
 from gva.models.storyboard import MicroBeat, Storyboard
 
@@ -129,9 +130,9 @@ def _capture_github_repo_screenshot(
     public_path: Path,
     settings: Settings,
 ) -> dict:
-    chrome = settings.chrome_exe
-    if chrome is None or not chrome.exists():
-        return {"status": "failed", "reason": "CHROME_EXE is not configured or does not exist"}
+    browser = find_browser(settings)
+    if browser is None:
+        return {"status": "failed", "reason": "BROWSER_EXE/CHROME_EXE is not configured, and Chrome/Edge was not found"}
     if not _is_github_url(repo_url):
         return {"status": "failed", "reason": "repo_url is not a GitHub URL"}
 
@@ -139,7 +140,7 @@ def _capture_github_repo_screenshot(
     if output_path.exists():
         output_path.unlink()
     command = [
-        str(chrome),
+        str(browser),
         "--headless=new",
         "--disable-gpu",
         "--disable-gpu-compositing",
@@ -167,7 +168,7 @@ def _capture_github_repo_screenshot(
     if not output_path.exists() or output_path.stat().st_size == 0:
         return {
             "status": "failed",
-            "reason": (result.stderr or result.stdout or "Chrome screenshot failed").strip()[:500],
+            "reason": (result.stderr or result.stdout or "Browser screenshot failed").strip()[:500],
         }
 
     shutil.copyfile(output_path, public_path)
@@ -176,6 +177,7 @@ def _capture_github_repo_screenshot(
         "output_path": str(output_path),
         "public_path": str(public_path),
         "public_src": "generated/assets/github-repo-home.png",
+        "browser_path": str(browser),
     }
 
 

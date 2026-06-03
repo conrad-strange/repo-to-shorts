@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Repo to Shorts">
+  <rect width="64" height="64" rx="14" fill="#0D1117"/>
+  <rect x="15" y="13" width="27" height="38" rx="5" fill="none" stroke="#58A6FF" stroke-width="4"/>
+  <path d="M22 22h14M22 31h10M22 40h8" stroke="#58A6FF" stroke-width="4" stroke-linecap="round"/>
+  <path d="M39 25l14 8-14 8z" fill="#3FB950"/>
+  <rect x="2" y="2" width="60" height="60" rx="13" fill="none" stroke="rgba(240,246,252,.16)" stroke-width="2"/>
+</svg>
