@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from edge_tts.exceptions import NoAudioReceived
+
 from gva.config import Settings
 from gva.models.render import WorkflowResult
 from gva.web import app as web_app
@@ -68,6 +70,9 @@ def test_storyboard_for_ui_merges_timed_duration_and_captions(tmp_path) -> None:
     timed["scenes"][0]["captions"] = [
         {"start": 0, "end": 2.1, "text": "底部字幕", "keywords": [], "source_scene_id": "scene-001"}
     ]
+    timed["scenes"][0]["visual"]["visual_pages"] = [
+        {"title": "分页标题", "caption": "分页短句", "items": ["分页条目"]}
+    ]
     (run_dir / "storyboard.final.json").write_text(json.dumps(base), encoding="utf-8")
     (run_dir / "storyboard-timed.json").write_text(json.dumps(timed), encoding="utf-8")
 
@@ -76,3 +81,12 @@ def test_storyboard_for_ui_merges_timed_duration_and_captions(tmp_path) -> None:
     assert payload["scenes"][0]["duration"] == 5.25
     assert payload["scenes"][0]["captions"][0]["text"] == "底部字幕"
     assert payload["scenes"][0]["visual"]["headline"] == "Demo"
+    assert payload["scenes"][0]["visual"]["visual_pages"][0]["title"] == "分页标题"
+
+
+def test_workflow_http_error_explains_edge_tts_no_audio() -> None:
+    error = web_app._workflow_http_error(NoAudioReceived("no audio"))
+
+    assert error.status_code == 502
+    assert "Edge TTS" in error.detail
+    assert "自动重试" in error.detail

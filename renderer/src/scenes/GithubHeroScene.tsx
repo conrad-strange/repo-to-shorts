@@ -1,21 +1,24 @@
 import React from 'react';
-import {AbsoluteFill, Easing, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig} from 'remotion';
-import {resolveAccent, theme} from '../styles/theme';
+import {AbsoluteFill, Easing, interpolate, spring, staticFile} from 'remotion';
+import {theme} from '../styles/theme';
 import type {Scene} from '../types';
-import {HighlightText} from './sceneKit';
+import {beatsForScenePage, HighlightText, normalizeCopy, useSceneMotion, visualPageTransition} from './sceneKit';
 
 export const GithubHeroScene: React.FC<{scene: Scene}> = ({scene}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const accent = resolveAccent(scene.visual.accent_color);
+  const motion = useSceneMotion(scene);
+  const {frame, fps, accent, pageState, timingFrame: pageFrame} = motion;
   const asset = scene.visual.asset_path;
   const repoUrl = scene.visual.repo_display_url || scene.visual.repo_url || 'github.com/repository';
   const repoHandle = compactRepoHandle(repoUrl);
-  const beats = (scene.visual.micro_beats || []).slice(0, 3);
-  const headlineSize = heroHeadlineSize(scene.visual.headline);
+  const headline = normalizeCopy(pageState?.page.title || '') || normalizeCopy(scene.visual.headline) || repoHandle;
+  const caption = normalizeCopy(pageState?.page.caption || '') || normalizeCopy(scene.visual.caption || '') || '快速看懂项目价值';
+  const beats = beatsForScenePage(scene, motion, 3);
+  const headlineSize = heroHeadlineSize(headline);
+  const motionFrame = pageState?.index ? Math.max(pageFrame, 32) : pageFrame;
+  const pageTransition = visualPageTransition(pageState, fps);
 
-  const titleIn = spring({frame: frame - 3, fps, config: {damping: 22, stiffness: 90}});
-  const cardIn = interpolate(frame, [14, 32], [0, 1], {
+  const titleIn = spring({frame: motionFrame - 3, fps, config: {damping: 22, stiffness: 90}});
+  const cardIn = interpolate(motionFrame, [14, 32], [0, 1], {
     easing: Easing.bezier(0.16, 1, 0.3, 1),
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
@@ -81,11 +84,11 @@ export const GithubHeroScene: React.FC<{scene: Scene}> = ({scene}) => {
             letterSpacing: 0,
             overflowWrap: 'break-word',
             wordBreak: 'break-word',
-            opacity: titleIn,
-            transform: `translateY(${interpolate(titleIn, [0, 1], [26, 0])}px)`,
+            opacity: titleIn * pageTransition.opacity,
+            transform: `translateY(${interpolate(titleIn, [0, 1], [26, 0]) + pageTransition.y}px)`,
           }}
         >
-          <HighlightText text={scene.visual.headline} accent={accent} />
+          <HighlightText text={headline} accent={accent} />
         </div>
       </div>
 
@@ -100,8 +103,8 @@ export const GithubHeroScene: React.FC<{scene: Scene}> = ({scene}) => {
           background: 'rgba(22,27,34,0.9)',
           boxShadow: `0 36px 100px ${theme.shadow}`,
           padding: '30px 34px',
-          opacity: cardIn,
-          transform: `translateY(${interpolate(cardIn, [0, 1], [32, 0])}px)`,
+          opacity: cardIn * pageTransition.opacity,
+          transform: `translateY(${interpolate(cardIn, [0, 1], [32, 0]) + pageTransition.y}px)`,
         }}
       >
         <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20}}>
@@ -132,7 +135,7 @@ export const GithubHeroScene: React.FC<{scene: Scene}> = ({scene}) => {
           >
             <div style={{fontSize: 21, color: theme.muted, marginBottom: 10}}>Core promise</div>
             <div style={{fontSize: 32, fontWeight: 700, lineHeight: 1.22}}>
-              <HighlightText text={scene.visual.caption || '快速看懂项目价值'} accent={accent} />
+              <HighlightText text={caption} accent={accent} />
             </div>
           </div>
           <div style={{display: 'grid', gap: 10}}>

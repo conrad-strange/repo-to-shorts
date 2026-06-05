@@ -4,7 +4,10 @@ set "ROOT_DIR=%~dp0..\.."
 set "FRONTEND_DIR=%~dp0.."
 call :resolve_node
 
-"%NODE_EXE%" "%FRONTEND_DIR%\node_modules\typescript\bin\tsc" -b
+"%NODE_EXE%" "%FRONTEND_DIR%\node_modules\typescript\lib\tsc.js" --noEmit -p "%FRONTEND_DIR%\tsconfig.json"
+if errorlevel 1 exit /b %errorlevel%
+
+"%NODE_EXE%" "%FRONTEND_DIR%\node_modules\typescript\lib\tsc.js" --noEmit -p "%FRONTEND_DIR%\tsconfig.node.json"
 if errorlevel 1 exit /b %errorlevel%
 
 "%NODE_EXE%" "%FRONTEND_DIR%\node_modules\vite\bin\vite.js" build

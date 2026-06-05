@@ -74,10 +74,53 @@ def test_web_rerender_creates_new_run_without_overwriting_source(tmp_path, monke
         web_app.RerenderRequest(render_profile="preview", storyboard=storyboard.model_dump(mode="json")),
     )
 
-    assert payload["run_id"] == "0002"
+    assert payload["run_id"] == "0002+30s"
     assert captured["user_brief"] is None
     assert (source_run / "video.mp4").read_bytes() == b"old-video"
-    assert (project_root / "runs" / "0002" / "video.mp4").read_bytes() == b"new-video"
+    assert (project_root / "runs" / "0002+30s" / "video.mp4").read_bytes() == b"new-video"
+
+
+def test_run_payload_includes_visible_text_manifest(tmp_path) -> None:
+    project_root = tmp_path / "demo"
+    run_dir = project_root / "runs" / "0001"
+    logs_dir = run_dir / "logs"
+    logs_dir.mkdir(parents=True)
+    (run_dir / "workflow-metadata.json").write_text(json.dumps({"run_id": "0001"}), encoding="utf-8")
+    storyboard = Storyboard(
+        title="Demo",
+        scenes=[
+            Scene(
+                id="scene-1",
+                type="text",
+                start=0,
+                duration=3,
+                narration="Demo narration",
+                visual=VisualSpec(layout="text", headline="Demo"),
+            )
+        ],
+    )
+    (run_dir / "storyboard.json").write_text(storyboard.model_dump_json(indent=2), encoding="utf-8")
+    (logs_dir / "visible-text-manifest.json").write_text(
+        json.dumps(
+            {
+                "issues": [],
+                "scenes": [
+                    {
+                        "scene_id": "scene-1",
+                        "entries": [
+                            {"source": "visual.headline", "text": "Demo", "allowed_from_narration": False}
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    payload = web_app._run_payload("demo", "0001", project_root)
+
+    assert payload["visible_text_manifest"]["scenes"][0]["scene_id"] == "scene-1"
+    assert payload["visible_text_manifest"]["scenes"][0]["entries"][0]["text"] == "Demo"
 
 
 def test_web_rerender_accepts_updated_user_brief(tmp_path, monkeypatch) -> None:
@@ -142,3 +185,67 @@ def test_web_rerender_accepts_updated_user_brief(tmp_path, monkeypatch) -> None:
 
     assert captured["user_brief"] == "更适合短视频；上手简单"
     assert payload["metadata"]["user_brief"] == "更适合短视频；上手简单"
+
+
+def test_web_rerender_accepts_updated_video_mode(tmp_path, monkeypatch) -> None:
+    project_root = tmp_path / "demo"
+    source_run = project_root / "runs" / "0001"
+    source_run.mkdir(parents=True)
+    (source_run / "workflow-metadata.json").write_text(
+        json.dumps(
+            {
+                "run_id": "0001",
+                "root_output_dir": str(project_root),
+                "project_path": str(tmp_path / "repo"),
+                "render_profile": "preview",
+                "render_strategy": "remotion-primary",
+                "video_mode": "short_30s",
+            }
+        ),
+        encoding="utf-8",
+    )
+    storyboard = Storyboard(
+        title="Demo",
+        scenes=[
+            Scene(
+                id="scene-1",
+                type="text",
+                start=0,
+                duration=3,
+                narration="Demo narration",
+                visual=VisualSpec(layout="text", headline="Demo"),
+            )
+        ],
+    )
+    (source_run / "storyboard.json").write_text(storyboard.model_dump_json(indent=2), encoding="utf-8")
+    monkeypatch.setattr(web_app, "Settings", lambda: Settings(outputs_dir=tmp_path))
+    captured = {}
+
+    def fake_workflow(**kwargs):
+        captured.update(kwargs)
+        run_id = kwargs["run_id"]
+        output_dir = Path(kwargs["output_dir"]) / "runs" / run_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+        metadata = {
+            "run_id": run_id,
+            "root_output_dir": str(kwargs["output_dir"]),
+            "video_mode": kwargs["settings"].video_mode,
+        }
+        (output_dir / "workflow-metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+        return WorkflowResult(output_dir=output_dir, metadata=metadata)
+
+    monkeypatch.setattr(web_app, "run_render_workflow", fake_workflow)
+
+    payload = web_app._rerender_payload(
+        "demo",
+        "0001",
+        web_app.RerenderRequest(
+            render_profile="preview",
+            video_mode="technical_90s",
+            storyboard=storyboard.model_dump(mode="json"),
+        ),
+    )
+
+    assert captured["settings"].video_mode == "technical_90s"
+    assert payload["metadata"]["video_mode"] == "technical_90s"
+    assert payload["run_label"] == "0002+90s"

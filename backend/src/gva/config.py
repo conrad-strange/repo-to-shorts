@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     tts_provider: str = "edge"
     tts_voice: str = "zh-CN-XiaoxiaoNeural"
-    tts_rate: str = "+25%"
+    tts_rate: str = "+32%"
     render_strategy: str = "remotion-primary"
     video_mode: str = "standard_60s"
     storytelling_mode: str = "experience_first"

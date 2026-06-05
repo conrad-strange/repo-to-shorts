@@ -17,12 +17,19 @@ export type SceneAnimation = 'fade' | 'slide' | 'rise' | 'zoom' | 'none';
 export type MicroBeatKind = 'text' | 'metric' | 'code' | 'flow' | 'warning' | 'cta';
 export type VisualAssetType = 'github_repo_home' | 'readme_focus' | 'none';
 export type VisualFocusTarget = 'repo_name' | 'readme_title' | 'install_command' | 'readme_section' | 'none';
+export type MotionAsset = 'data_flow' | 'code_scan' | 'evidence_pulse' | 'repo_pulse' | 'spark_burst' | 'none';
 
 export interface MicroBeat {
   text: string;
   kind: MicroBeatKind;
   emphasis?: string | null;
   start_ratio: number;
+}
+
+export interface VisualPage {
+  title: string;
+  caption?: string | null;
+  items: string[];
 }
 
 export interface VisualSpec {
@@ -43,6 +50,9 @@ export interface VisualSpec {
   repo_display_url?: string | null;
   media_type?: 'image' | 'video' | 'none';
   evidence_refs?: string[];
+  motion_asset?: MotionAsset;
+  motion_delay_ratio?: number;
+  visual_pages?: VisualPage[];
 }
 
 export interface CaptionCue {

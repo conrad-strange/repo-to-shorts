@@ -6,6 +6,7 @@ from openai import BadRequestError
 from gva.config import Settings
 from gva.core.json_utils import loads_json_object
 from gva.core.llm_client import build_openai_client, get_generation_model
+from gva.core.visible_text import clean_visible_text, clean_visible_text_list
 from gva.models.script import VideoScript
 from gva.models.storyboard import Storyboard
 
@@ -24,6 +25,8 @@ def write_storyboard(script: VideoScript, settings: Settings, user_brief: str | 
                 {
                     "video_mode": settings.video_mode,
                     "mode_notes": _mode_notes(settings.video_mode),
+                    "brand_mode": settings.brand_mode,
+                    "brand_notes": _brand_notes(settings.brand_mode),
                     "storytelling_mode": settings.storytelling_mode,
                     "storytelling_notes": _storytelling_notes(settings.storytelling_mode),
                     "user_brief": user_brief or "",
@@ -94,18 +97,23 @@ def sanitize_storyboard_payload(payload: dict) -> dict:
 
         visual = dict(scene.get("visual")) if isinstance(scene.get("visual"), dict) else {}
         visual["layout"] = _layout_from_values(_first_present(visual, "layout", "type") or scene.get("type"), scene.get("type"))
-        visual["headline"] = _clean_string(
+        visual["headline"] = _clean_visible_string(
             _first_present(visual, "headline", "title") or _first_present(scene, "headline", "title"),
             fallback="",
+            limit=36,
         )
-        visual["bullets"] = _string_list(_first_present(visual, "bullets", "items") or _first_present(scene, "bullets", "items"))
-        visual["diagram_nodes"] = _string_list(
+        visual["bullets"] = _visible_string_list(
+            _first_present(visual, "bullets", "items") or _first_present(scene, "bullets", "items"),
+            limit=28,
+        )
+        visual["diagram_nodes"] = _visible_string_list(
             _first_present(visual, "diagram_nodes", "diagramNodes", "nodes")
-            or _first_present(scene, "diagram_nodes", "diagramNodes", "nodes")
+            or _first_present(scene, "diagram_nodes", "diagramNodes", "nodes"),
+            limit=42,
         )
         visual["icons"] = _string_list(_first_present(visual, "icons", "icon"))
         visual["micro_beats"] = _sanitize_micro_beats(visual.get("micro_beats"), visual)
-        visual["caption"] = _optional_string(_first_present(visual, "caption", "subtitle"))
+        visual["caption"] = _optional_visible_string(_first_present(visual, "caption", "subtitle"), limit=42)
         visual["code"] = _optional_multiline_string(_first_present(visual, "code", "codeSnippet") or scene.get("codeSnippet"))
         visual["accent_color"] = _accent_from_value(visual.get("accent_color"))
         visual["animation"] = _animation_from_value(_first_present(visual, "animation", "motion") or scene.get("animation"))
@@ -115,6 +123,15 @@ def sanitize_storyboard_payload(payload: dict) -> dict:
         visual["repo_url"] = _optional_string(_first_present(visual, "repo_url", "repoUrl"))
         visual["repo_display_url"] = _optional_string(_first_present(visual, "repo_display_url", "repoDisplayUrl"))
         visual["evidence_refs"] = _string_list(_first_present(visual, "evidence_refs", "evidenceRefs"))
+        visual["motion_asset"] = _motion_asset_from_value(
+            _first_present(visual, "motion_asset", "motionAsset", "lottie_asset", "lottieAsset")
+        )
+        visual["motion_delay_ratio"] = _safe_ratio(
+            _first_present(visual, "motion_delay_ratio", "motionDelayRatio"),
+            0.54,
+            lower=0.0,
+            upper=0.9,
+        )
         scene["visual"] = visual
         sanitized_scenes.append(scene)
 
@@ -153,6 +170,20 @@ def _string_list(value: object) -> list[str]:
     return [cleaned] if cleaned else []
 
 
+def _visible_string_list(value: object, limit: int) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return clean_visible_text_list(
+            [str(item).strip() for item in value if not isinstance(item, (dict, list))],
+            limit=limit,
+        )
+    if isinstance(value, (dict, list)):
+        return []
+    text = clean_visible_text(value, limit=limit)
+    return [text] if text else []
+
+
 def _first_present(source: dict, *keys: str) -> object:
     for key in keys:
         value = source.get(key)
@@ -169,9 +200,17 @@ def _clean_string(value: object, fallback: str = "") -> str:
     return _normalize_terms(str(value).replace("\r", " ").strip())
 
 
+def _clean_visible_string(value: object, fallback: str = "", limit: int | None = None) -> str:
+    return clean_visible_text(value, limit=limit) or fallback
+
+
 def _optional_string(value: object) -> str | None:
     cleaned = _clean_string(value, fallback="")
     return cleaned or None
+
+
+def _optional_visible_string(value: object, limit: int | None = None) -> str | None:
+    return clean_visible_text(value, limit=limit)
 
 
 def _optional_multiline_string(value: object) -> str | None:
@@ -190,6 +229,10 @@ def _safe_float(value: object, fallback: float) -> float:
         return float(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return fallback
+
+
+def _safe_ratio(value: object, fallback: float, lower: float, upper: float) -> float:
+    return min(max(_safe_float(value, fallback), lower), upper)
 
 
 def _safe_int(value: object, fallback: int) -> int:
@@ -246,7 +289,7 @@ def _sanitize_micro_beats(value: object, visual: dict) -> list[dict]:
         elif not isinstance(item, dict):
             item = {"text": item}
         item = dict(item or {})
-        text = _clean_string(item.get("text"), fallback="")
+        text = clean_visible_text(item.get("text"), limit=28) or ""
         if not text:
             continue
         kind = _clean_string(item.get("kind"), fallback="text")
@@ -411,9 +454,54 @@ def _focus_target_from_value(value: object) -> str:
     return normalized if normalized in allowed else "none"
 
 
+def _motion_asset_from_value(value: object) -> str:
+    if not isinstance(value, str):
+        return "none"
+    normalized = value.strip().lower().replace("-", "_")
+    aliases = {
+        "flow": "data_flow",
+        "pipeline": "data_flow",
+        "architecture": "data_flow",
+        "circuit": "data_flow",
+        "terminal": "code_scan",
+        "code": "code_scan",
+        "scan": "code_scan",
+        "readme": "evidence_pulse",
+        "evidence": "evidence_pulse",
+        "proof": "evidence_pulse",
+        "github": "repo_pulse",
+        "repo": "repo_pulse",
+        "star": "spark_burst",
+        "cta": "spark_burst",
+        "none": "none",
+        "": "none",
+    }
+    normalized = aliases.get(normalized, normalized)
+    allowed = {"data_flow", "code_scan", "evidence_pulse", "repo_pulse", "spark_burst", "none"}
+    return normalized if normalized in allowed else "none"
+
+
 def _mode_notes(video_mode: str) -> str:
     if video_mode == "short_30s":
-        return "Use 4-5 scenes. Keep the first scene under 4s and skip deep code details."
+        return (
+            "Use 4-5 fast scenes. Match scene durations to narration; do not create long holds. "
+            "Keep the first scene under 4s and skip deep code details."
+        )
     if video_mode == "technical_90s":
-        return "Use 7-9 scenes. Add architecture/code detail only when evidence supports it."
-    return "Use 5-7 scenes. Balance hook, repo overview, flow, highlights, and CTA."
+        return (
+            "Use 7-9 fast but information-rich scenes. The 90s length must come from richer voiceover and evidence-backed detail, "
+            "not empty visual padding."
+        )
+    return (
+        "Use 5-7 fast scenes. The 60s length must come from about 60s of voiceover, with only brief transition holds. "
+        "Balance hook, repo overview, flow, highlights, and CTA."
+    )
+
+
+def _brand_notes(brand_mode: str) -> str:
+    if str(brand_mode).strip().lower() in {"rb", "repo-to-bombs", "bomb", "bombs"}:
+        return "Entertainment mode may use a more playful opener, but still keeps evidence-backed content."
+    return (
+        "R2S should feel like a polished developer short video: high-energy, tight cuts, strong hook, "
+        "short visual keywords, and no slow PPT-like pauses."
+    )

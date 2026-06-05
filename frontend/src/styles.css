@@ -606,6 +606,128 @@ label {
   color: #ffb86c;
 }
 
+.visible-text-preview-box {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(88, 166, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(1, 4, 9, 0.32);
+  padding: 10px;
+}
+
+.visible-text-list {
+  display: grid;
+  gap: 6px;
+}
+
+.visible-text-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  border: 1px solid rgba(240, 246, 252, 0.07);
+  border-radius: 7px;
+  background: rgba(13, 17, 23, 0.72);
+  padding: 7px 8px;
+}
+
+.visible-text-row span {
+  color: #58a6ff;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.visible-text-row strong {
+  color: #c9d1d9;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.theme-bomb .visible-text-row span {
+  color: #ffb86c;
+}
+
+.visual-pages-editor {
+  display: grid;
+  gap: 9px;
+  border: 1px solid rgba(88, 166, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(1, 4, 9, 0.28);
+  padding: 10px;
+}
+
+.visual-page-list {
+  display: grid;
+  gap: 10px;
+}
+
+.visual-page-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.visual-page-sync-actions button {
+  min-height: 32px;
+  border-radius: 8px;
+  background: rgba(22, 27, 34, 0.86);
+  color: #c9d1d9;
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+.visual-page-sync-actions button:hover {
+  border-color: rgba(88, 166, 255, 0.42);
+  color: #f0f6fc;
+}
+
+.visual-page-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(240, 246, 252, 0.08);
+  border-radius: 8px;
+  background: rgba(13, 17, 23, 0.72);
+  padding: 10px;
+}
+
+.visual-page-head {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto 1fr;
+}
+
+.visual-page-head strong {
+  color: #58a6ff;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.theme-bomb .visual-page-head strong {
+  color: #ffb86c;
+}
+
+.visual-page-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.visual-page-actions button,
+.secondary-action {
+  border-radius: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.secondary-action {
+  color: #f0f6fc;
+  font-weight: 700;
+  text-align: left;
+}
+
 .add-scene-panel {
   display: grid;
   gap: 10px;

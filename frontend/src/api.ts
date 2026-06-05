@@ -51,7 +51,7 @@ async function parseErrorDetail(response: Response): Promise<string> {
 
 export const api = {
   system: () => request<Record<string, unknown>>('/api/system'),
-  projects: () => request<{projects: Array<{id: string; path: string; runs: string[]}>}>('/api/projects'),
+  projects: () => request<{projects: Array<{id: string; path: string; runs: string[]; run_labels?: Record<string, string>}>}>('/api/projects'),
   ttsPreview: (payload: {voice: string; text?: string; rate?: string}) =>
     request<TtsPreviewResponse>('/api/tts/preview', {method: 'POST', body: JSON.stringify(payload)}),
   createJob: (payload: WorkflowRequest) =>

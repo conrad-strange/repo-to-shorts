@@ -16,7 +16,11 @@ from gva.core.llm_client import llm_settings_error
 from gva.core.captions import attach_caption_cues
 from gva.core.demo_report import generate_demo_assets
 from gva.core.evidence import build_evidence_index, evidence_refs_for_keys, safe_fallback_refs
-from gva.core.pacing import tighten_storyboard_for_video_mode
+from gva.core.pacing import (
+    duration_range_for_video_mode,
+    fit_storyboard_duration_for_video_mode,
+    tighten_storyboard_for_video_mode,
+)
 from gva.core.render_bridge import (
     install_renderer_dependencies,
     prepare_remotion_public_assets,
@@ -26,6 +30,8 @@ from gva.core.repo_loader import resolve_project_source
 from gva.core.runs import allocate_run
 from gva.core.tts import run_tts_timing
 from gva.core.visual_assets import prepare_visual_assets
+from gva.core.visible_manifest import apply_visible_text_policy
+from gva.core.visual_pages import apply_visual_pages
 from gva.models.render import WorkflowResult
 from gva.models.storyboard import MicroBeat
 
@@ -59,7 +65,11 @@ def run_render_workflow(
     _emit_progress(progress_callback, "repo", "读取 GitHub 仓库", 5)
     project_path = resolve_project_source(project_path, repo_url, settings.repo_cache_dir)
     root_output_dir = output_dir.resolve()
-    run_info = allocate_run(root_output_dir, requested_run=run_id)
+    run_info = allocate_run(
+        root_output_dir,
+        requested_run=run_id,
+        label_suffix=_video_mode_suffix(settings.video_mode),
+    )
     output_dir = run_info.run_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     _apply_force_flags(
@@ -92,6 +102,10 @@ def run_render_workflow(
         "tts_voice": settings.tts_voice,
         "tts_rate": settings.tts_rate,
         "video_mode": settings.video_mode,
+        "duration_range_seconds": {
+            "min": duration_range_for_video_mode(settings.video_mode)[0],
+            "max": duration_range_for_video_mode(settings.video_mode)[1],
+        },
         "storytelling_mode": settings.storytelling_mode,
         "render_profile": settings.render_profile,
         "brand_mode": settings.brand_mode,
@@ -225,9 +239,16 @@ def run_render_workflow(
         ):
             metadata["bomb_hook"] = _bomb_hook_text(settings)
             pacing_changed = True
+        if fit_storyboard_duration_for_video_mode(storyboard, settings.video_mode):
+            metadata["duration_bucket_adjusted"] = True
+            pacing_changed = True
         _attach_storyboard_evidence_refs(storyboard, script, evidence_index)
         storyboard_path.write_text(storyboard.model_dump_json(indent=2), encoding="utf-8")
         storyboard_final_path.write_text(storyboard.model_dump_json(indent=2), encoding="utf-8")
+        metadata["storyboard_duration_seconds"] = round(
+            sum(scene.duration for scene in storyboard.scenes),
+            2,
+        )
         metadata["visual_assets_manifest_path"] = str(output_dir / "logs" / "visual-assets-manifest.json")
         metadata["storyboard_raw_path"] = str(storyboard_raw_path)
         metadata["storyboard_final_path"] = str(storyboard_final_path)
@@ -280,10 +301,17 @@ def run_render_workflow(
                 if _apply_bomb_mode_to_storyboard(storyboard, settings, repo_url):
                     metadata["bomb_hook"] = _bomb_hook_text(settings)
                     pacing_changed = True
+                if fit_storyboard_duration_for_video_mode(storyboard, settings.video_mode):
+                    metadata["duration_bucket_adjusted_after_repair"] = True
+                    pacing_changed = True
                 _attach_storyboard_evidence_refs(storyboard, script, evidence_index)
                 script_path.write_text(script.model_dump_json(indent=2), encoding="utf-8")
                 script_md_path.write_text(render_script_markdown(script), encoding="utf-8")
                 storyboard_path.write_text(storyboard.model_dump_json(indent=2), encoding="utf-8")
+                metadata["storyboard_duration_seconds"] = round(
+                    sum(scene.duration for scene in storyboard.scenes),
+                    2,
+                )
                 (output_dir / "storyboard.repaired.json").write_text(
                     storyboard.model_dump_json(indent=2),
                     encoding="utf-8",
@@ -338,7 +366,6 @@ def run_render_workflow(
                 settings=settings,
             )
             timed_storyboard = attach_caption_cues(timed_storyboard, output_dir)
-            timed_storyboard_path.write_text(timed_storyboard.model_dump_json(indent=2), encoding="utf-8")
         _emit_progress(progress_callback, "tts", "配音字幕完成", 86)
         metadata["timed_storyboard_path"] = str(timed_storyboard_path)
         metadata["tts_manifest_path"] = str(tts_manifest_path)
@@ -349,7 +376,9 @@ def run_render_workflow(
 
         if not any(scene.captions for scene in timed_storyboard.scenes):
             timed_storyboard = attach_caption_cues(timed_storyboard, output_dir)
-            timed_storyboard_path.write_text(timed_storyboard.model_dump_json(indent=2), encoding="utf-8")
+        timed_storyboard = apply_visual_pages(timed_storyboard, output_dir=output_dir)
+        timed_storyboard = apply_visible_text_policy(timed_storyboard, output_dir=output_dir)
+        timed_storyboard_path.write_text(timed_storyboard.model_dump_json(indent=2), encoding="utf-8")
         metadata["caption_cues_path"] = str(output_dir / "logs" / "caption-cues.json")
 
         metadata["render_strategy"] = settings.render_strategy
@@ -551,11 +580,33 @@ def _is_bomb_mode(settings: Settings) -> bool:
 
 def _apply_brand_defaults(settings: Settings) -> None:
     if not _is_bomb_mode(settings):
+        if _tts_rate_percent(settings.tts_rate) is None or _tts_rate_percent(settings.tts_rate) < 30:
+            settings.tts_rate = "+32%"
         return
     if not settings.tts_voice or settings.tts_voice == "zh-CN-XiaoxiaoNeural":
         settings.tts_voice = settings.rb_tts_voice
-    if not settings.tts_rate or settings.tts_rate in {"+0%", "+25%"}:
+    if not settings.tts_rate or settings.tts_rate in {"+0%", "+25%", "+30%", "+32%"}:
         settings.tts_rate = settings.rb_tts_rate
+
+
+def _tts_rate_percent(value: str | None) -> int | None:
+    match = re.fullmatch(r"\+?(-?\d+)%", str(value or "").strip())
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def _video_mode_suffix(video_mode: str | None) -> str | None:
+    if video_mode == "short_30s":
+        return "30s"
+    if video_mode == "standard_60s":
+        return "60s"
+    if video_mode == "technical_90s":
+        return "90s"
+    return None
 
 
 def _normalize_user_brief(value: str | None) -> str:

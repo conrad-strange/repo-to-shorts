@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import webbrowser
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Callable, Literal
 
@@ -23,6 +24,7 @@ from git.exc import GitCommandError
 from pydantic import BaseModel, Field
 
 from gva.config import Settings
+from gva.core.asyncio_windows import install_windows_connection_reset_filter
 from gva.core.render_bridge import find_browser, find_ffmpeg
 from gva.core.runs import allocate_run, list_run_ids, resolve_run_dir
 from gva.core.tts import _synthesize_edge_tts
@@ -66,6 +68,7 @@ class StoryboardUpdateRequest(BaseModel):
 
 class RerenderRequest(BaseModel):
     render_profile: RenderProfile | None = None
+    video_mode: VideoMode | None = None
     user_brief: str | None = None
     brand_mode: BrandMode | None = None
     bomb_circle: str | None = None
@@ -92,8 +95,14 @@ class UserImageAssetRequest(BaseModel):
     data_url: str
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    install_windows_connection_reset_filter()
+    yield
+
+
 def create_app(frontend_dist: Path | None = None) -> FastAPI:
-    app = FastAPI(title="Repo to Shorts API", version="0.1.0")
+    app = FastAPI(title="Repo to Shorts API", version="0.1.0", lifespan=_lifespan)
     job_manager = JobManager(max_workers=int(os.getenv("GVA_WEB_MAX_JOBS", "1")))
     app.add_middleware(
         CORSMiddleware,
@@ -102,10 +111,6 @@ def create_app(frontend_dist: Path | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-
-    @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(_request, _exc: RequestValidationError) -> JSONResponse:
-        return JSONResponse(status_code=400, content={"detail": "请求参数不完整，请检查 GitHub 链接和生成配置。"})
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler_zh(_request, _exc: RequestValidationError) -> JSONResponse:
@@ -158,6 +163,7 @@ def create_app(frontend_dist: Path | None = None) -> FastAPI:
                     "id": path.name,
                     "path": str(path),
                     "runs": list_run_ids(path),
+                    "run_labels": _run_labels(path),
                 }
             )
         return {"projects": items}
@@ -395,7 +401,7 @@ def _rerender_payload(
         raise HTTPException(status_code=400, detail="workflow-metadata.json is required to rerender.")
 
     settings = Settings()
-    settings.video_mode = metadata.get("video_mode", settings.video_mode)
+    settings.video_mode = request.video_mode or metadata.get("video_mode", settings.video_mode)
     settings.render_strategy = metadata.get("render_strategy", settings.render_strategy)
     settings.storytelling_mode = metadata.get("storytelling_mode", settings.storytelling_mode)
     settings.render_profile = request.render_profile or metadata.get("render_profile", "preview")
@@ -406,7 +412,7 @@ def _rerender_payload(
     settings.remotion_concurrency = request.remotion_concurrency or metadata.get("remotion_concurrency")
 
     root_output_dir = Path(metadata.get("root_output_dir", _project_root(project_id))).resolve()
-    new_run = allocate_run(root_output_dir)
+    new_run = allocate_run(root_output_dir, label_suffix=_video_mode_suffix(settings.video_mode))
     new_run_dir = new_run.run_dir
     _seed_rerender_run(source_run_dir, new_run_dir, request.storyboard)
 
@@ -734,19 +740,47 @@ def _run_payload(project_id: str, run_id: str, project_root: Path) -> dict[str, 
     run_dir = resolve_run_dir(project_root, run_id)
     metadata = _read_json(run_dir / "workflow-metadata.json") or {}
     storyboard = _storyboard_for_ui(run_dir)
+    actual_run_id = run_dir.name
     return {
         "project_id": project_id,
-        "run_id": run_id,
+        "run_id": actual_run_id,
+        "run_label": _run_label(actual_run_id, metadata),
         "project_root": str(project_root),
         "run_dir": str(run_dir),
         "metadata": metadata,
         "repo_summary": _read_json(run_dir / "repo-summary.json"),
         "script_markdown": _read_text(run_dir / "script.md"),
         "storyboard": storyboard,
+        "visible_text_manifest": _read_json(run_dir / "logs" / "visible-text-manifest.json"),
         "verification": _read_json(run_dir / "verification-report.json"),
         "evaluation": _read_json(run_dir / "evaluation-report.json"),
-        "files": _artifact_urls(project_id, run_id, run_dir),
+        "files": _artifact_urls(project_id, actual_run_id, run_dir),
     }
+
+
+def _run_labels(project_root: Path) -> dict[str, str]:
+    labels = {}
+    for run_id in list_run_ids(project_root):
+        metadata = _read_json(project_root / "runs" / run_id / "workflow-metadata.json") or {}
+        labels[run_id] = _run_label(run_id, metadata)
+    return labels
+
+
+def _run_label(run_id: str, metadata: dict[str, Any]) -> str:
+    if "+" in run_id:
+        return run_id
+    suffix = _video_mode_suffix(metadata.get("video_mode"))
+    return f"{run_id}+{suffix}" if suffix else run_id
+
+
+def _video_mode_suffix(video_mode: object) -> str | None:
+    if video_mode == "short_30s":
+        return "30s"
+    if video_mode == "standard_60s":
+        return "60s"
+    if video_mode == "technical_90s":
+        return "90s"
+    return None
 
 
 def _storyboard_for_ui(run_dir: Path) -> Any:
@@ -774,6 +808,11 @@ def _storyboard_for_ui(run_dir: Path) -> Any:
         for key in ("start", "duration", "captions"):
             if key in timed_scene:
                 scene[key] = timed_scene[key]
+        timed_visual = timed_scene.get("visual")
+        if isinstance(timed_visual, dict) and isinstance(timed_visual.get("visual_pages"), list):
+            visual = scene.setdefault("visual", {})
+            if isinstance(visual, dict):
+                visual["visual_pages"] = timed_visual["visual_pages"]
     return merged
 
 
@@ -908,52 +947,7 @@ def _validate_output_name(value: str | None) -> str:
 def _workflow_http_error(exc: Exception) -> HTTPException:
     text = str(exc)
     lowered = text.lower()
-    if isinstance(exc, GitCommandError):
-        if any(token in lowered for token in ["repository not found", "not found", "authentication failed"]):
-            return HTTPException(
-                status_code=404,
-                detail="没有找到这个公开 GitHub 仓库。请检查链接是否正确，或确认仓库不是私有仓库。",
-            )
-        return HTTPException(
-            status_code=502,
-            detail="访问 GitHub 仓库失败。请检查网络连接，稍后重试。",
-        )
-    if isinstance(exc, ValueError):
-        return HTTPException(status_code=400, detail=str(exc) or "输入参数不合法。")
-    if any(token in lowered for token in ["github", "git fetch", "git clone", "network", "timeout"]):
-        return HTTPException(status_code=502, detail="访问 GitHub 或同步仓库失败。请检查网络连接后重试。")
-    return HTTPException(status_code=500, detail=f"生成流程出现内部错误：{exc.__class__.__name__}。")
-
-
-def _validate_repo_url(url: str | None) -> str:
-    value = (url or "").strip()
-    if not value:
-        return "请输入 GitHub 仓库链接。"
-    if re.search(r"\s", value):
-        return "仓库链接不能包含空格。"
-    if re.search(r"[<>{}\[\]|\\^`\"'，。；：]", value):
-        return "仓库链接包含非法字符，请粘贴完整 GitHub URL。"
-    if not value.lower().startswith("https://github.com/"):
-        return "请输入以 https://github.com/ 开头的公开仓库链接。"
-    if not re.match(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\.git)?/?$", value, re.I):
-        return "链接格式应为 https://github.com/owner/repo。"
-    return ""
-
-
-def _validate_output_name(value: str | None) -> str:
-    if value is None:
-        return ""
-    cleaned = value.strip()
-    if not cleaned:
-        return "输出名不能为空。"
-    if not re.match(r"^[A-Za-z0-9._-]+$", cleaned):
-        return "输出名只能包含字母、数字、点、下划线和短横线。"
-    return ""
-
-
-def _workflow_http_error(exc: Exception) -> HTTPException:
-    text = str(exc)
-    lowered = text.lower()
+    exc_name = exc.__class__.__name__.lower()
     if isinstance(exc, HTTPException):
         return exc
     if isinstance(exc, GitCommandError):
@@ -965,6 +959,10 @@ def _workflow_http_error(exc: Exception) -> HTTPException:
         return HTTPException(status_code=502, detail="访问 GitHub 仓库失败。请检查网络连接，稍后重试。")
     if isinstance(exc, ValueError):
         return HTTPException(status_code=400, detail=str(exc) or "输入参数不合法。")
+    if "noaudioreceived" in exc_name or "no audio" in lowered or "edge tts" in lowered:
+        return HTTPException(status_code=502, detail="Edge TTS 没有返回音频，系统已自动重试但仍失败。请稍后重试或换一个 TTS 音色。")
+    if "websocket" in exc_name or "websocket" in lowered:
+        return HTTPException(status_code=502, detail="Edge TTS 连接临时中断，系统已自动重试但仍失败。请稍后重试。")
     if any(token in lowered for token in ["github", "git fetch", "git clone", "network", "timeout"]):
         return HTTPException(status_code=502, detail="访问 GitHub 或同步仓库失败。请检查网络连接后重试。")
     return HTTPException(status_code=500, detail=f"生成流程出现内部错误：{exc.__class__.__name__}。")
@@ -983,7 +981,7 @@ def ensure_frontend_dist(settings: Settings, rebuild: bool = False) -> Path:
     frontend_dir = settings.frontend_dir.resolve()
     dist_dir = frontend_dir / "dist"
     index_html = dist_dir / "index.html"
-    if index_html.exists() and not rebuild:
+    if index_html.exists() and not rebuild and not _frontend_source_newer_than(index_html, frontend_dir):
         return dist_dir
 
     package_json = frontend_dir / "package.json"
@@ -997,6 +995,38 @@ def ensure_frontend_dist(settings: Settings, rebuild: bool = False) -> Path:
     if not index_html.exists():
         raise FileNotFoundError(f"Frontend build did not create: {index_html}")
     return dist_dir
+
+
+def _frontend_source_newer_than(index_html: Path, frontend_dir: Path) -> bool:
+    if not index_html.exists():
+        return True
+    dist_mtime = index_html.stat().st_mtime_ns
+    for path in _frontend_build_inputs(frontend_dir):
+        if path.stat().st_mtime_ns > dist_mtime:
+            return True
+    return False
+
+
+def _frontend_build_inputs(frontend_dir: Path) -> list[Path]:
+    inputs: list[Path] = []
+    for rel_path in [
+        "index.html",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.json",
+        "tsconfig.node.json",
+        "vite.config.ts",
+        "scripts/build.cmd",
+    ]:
+        path = frontend_dir / rel_path
+        if path.exists() and path.is_file():
+            inputs.append(path)
+
+    for rel_dir in ["src", "public"]:
+        directory = frontend_dir / rel_dir
+        if directory.exists() and directory.is_dir():
+            inputs.extend(path for path in directory.rglob("*") if path.is_file())
+    return inputs
 
 
 def _find_npm(settings: Settings) -> Path:

@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from gva.config import Settings
+from gva.core.visible_manifest import apply_visible_text_policy
 from gva.models.storyboard import Storyboard
 
 
@@ -23,6 +24,7 @@ def prepare_remotion_public_assets(
     storyboard_public_path = public_dir / "storyboard.json"
     audio_public_path = public_dir / "voice.mp3"
     render_scale = _render_scale_for_profile(settings.render_profile)
+    storyboard = apply_visible_text_policy(storyboard, output_dir=output_dir)
 
     storyboard_public_path.write_text(
         storyboard.model_dump_json(indent=2),

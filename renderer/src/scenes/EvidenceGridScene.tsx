@@ -1,20 +1,18 @@
 import React from 'react';
-import {useCurrentFrame, useVideoConfig} from 'remotion';
 import {theme} from '../styles/theme';
 import type {Scene} from '../types';
-import {accentOf, beatTiming, getBeats, HighlightText, SceneShell} from './sceneKit';
+import {beatsForScenePage, HighlightText, SceneShell, timingForMotion, useSceneMotion} from './sceneKit';
 
 export const EvidenceGridScene: React.FC<{scene: Scene}> = ({scene}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const accent = accentOf(scene);
-  const beats = getBeats(scene, 4);
+  const motion = useSceneMotion(scene);
+  const beats = beatsForScenePage(scene, motion, 4);
+  const {accent} = motion;
 
   return (
-    <SceneShell scene={scene} dense>
+    <SceneShell scene={scene} dense motion={motion}>
       <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 18}}>
         {beats.map((beat, index) => {
-          const timing = beatTiming(frame, fps, scene.duration, beat.start_ratio ?? index * 0.16);
+          const timing = timingForMotion(motion, beat.start_ratio ?? index * 0.16);
           return (
             <div
               key={`${beat.text}-${index}`}

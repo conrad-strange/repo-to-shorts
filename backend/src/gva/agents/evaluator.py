@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from gva.config import Settings
+from gva.core.pacing import duration_range_for_video_mode
 from gva.models.evaluation import EvaluationIssue, EvaluationReport
 from gva.models.script import VideoScript
 from gva.models.storyboard import Storyboard
@@ -31,6 +32,7 @@ def evaluate_output(output_dir: Path, settings: Settings) -> EvaluationReport:
         "tts-manifest": output_dir / "logs" / "tts-manifest.json",
         "timing-adjustment": output_dir / "logs" / "timing-adjustment.json",
         "visual-assets-manifest": output_dir / "logs" / "visual-assets-manifest.json",
+        "visible-text-manifest": output_dir / "logs" / "visible-text-manifest.json",
         "render-input": output_dir / "logs" / "render-input.json",
         "voice-audio": output_dir / "audio" / "voice.mp3",
         "video": video_path,
@@ -55,11 +57,12 @@ def evaluate_output(output_dir: Path, settings: Settings) -> EvaluationReport:
     tts_manifest = _load_model(required_files["tts-manifest"], TtsManifest)
     timing_log = _load_model(required_files["timing-adjustment"], TimingAdjustmentLog)
     visual_assets_manifest = _load_json(required_files["visual-assets-manifest"])
+    visible_text_manifest = _load_json(required_files["visible-text-manifest"])
 
     if storyboard:
-        _evaluate_storyboard(storyboard, "storyboard", issues, metrics)
+        _evaluate_storyboard(storyboard, "storyboard", issues, metrics, settings.video_mode)
     if timed_storyboard:
-        _evaluate_storyboard(timed_storyboard, "timed_storyboard", issues, metrics)
+        _evaluate_storyboard(timed_storyboard, "timed_storyboard", issues, metrics, settings.video_mode)
     if script:
         metrics["script_segment_count"] = len(script.segments)
         metrics["script_duration_seconds"] = script.duration_seconds
@@ -82,7 +85,7 @@ def evaluate_output(output_dir: Path, settings: Settings) -> EvaluationReport:
                     severity="medium",
                     category="tts",
                     message="TTS rate is not recorded as a mobile-short speedup.",
-                    suggestion="Use TTS_RATE=+25% and regenerate TTS artifacts.",
+                    suggestion="Use TTS_RATE=+32% and regenerate TTS artifacts.",
                 )
             )
     if timing_log:
@@ -110,6 +113,8 @@ def evaluate_output(output_dir: Path, settings: Settings) -> EvaluationReport:
                     suggestion="Check BROWSER_EXE/CHROME_EXE or network access; the render should fall back to text scenes.",
                 )
             )
+    if visible_text_manifest:
+        _evaluate_visible_text_manifest(visible_text_manifest, issues, metrics)
 
     media_info = _probe_video(required_files["video"], settings)
     metrics["video_path"] = str(required_files["video"])
@@ -161,10 +166,14 @@ def _evaluate_storyboard(
     prefix: str,
     issues: list[EvaluationIssue],
     metrics: dict[str, Any],
+    video_mode: str,
 ) -> None:
     total_duration = round(sum(scene.duration for scene in storyboard.scenes), 2)
+    minimum_duration, maximum_duration = duration_range_for_video_mode(video_mode)
     metrics[f"{prefix}_scene_count"] = len(storyboard.scenes)
     metrics[f"{prefix}_duration_seconds"] = total_duration
+    metrics[f"{prefix}_duration_min_seconds"] = minimum_duration
+    metrics[f"{prefix}_duration_max_seconds"] = maximum_duration
 
     if not 5 <= len(storyboard.scenes) <= 9:
         issues.append(
@@ -188,12 +197,28 @@ def _evaluate_storyboard(
                 )
             )
 
-    if total_duration > 60:
+    if total_duration < minimum_duration:
         issues.append(
             EvaluationIssue(
                 severity="medium",
                 category="timing",
-                message=f"{prefix} total duration is {total_duration}s; mobile-short target is <= 60s.",
+                message=(
+                    f"{prefix} total duration is {total_duration}s; "
+                    f"{video_mode} target is {minimum_duration:g}-{maximum_duration:g}s."
+                ),
+                suggestion="Regenerate or rerender so deterministic pacing can expand the storyboard.",
+            )
+        )
+
+    if total_duration > maximum_duration:
+        issues.append(
+            EvaluationIssue(
+                severity="medium",
+                category="timing",
+                message=(
+                    f"{prefix} total duration is {total_duration}s; "
+                    f"{video_mode} target is {minimum_duration:g}-{maximum_duration:g}s."
+                ),
                 suggestion="Regenerate a shorter script/storyboard or increase TTS rate.",
             )
         )
@@ -245,38 +270,10 @@ def _evaluate_storyboard(
 
 
 def _evaluate_visual_density(scene, issues: list[EvaluationIssue]) -> None:
-    visual_texts = [scene.visual.headline, scene.visual.caption or "", *scene.visual.bullets]
-    if scene.visual.micro_beats:
-        visual_texts.extend(beat.text for beat in scene.visual.micro_beats)
-
-    for text in visual_texts:
-        cleaned = _normalize_text(text)
-        if not cleaned:
-            continue
-        if len(cleaned) > 42:
-            issues.append(
-                EvaluationIssue(
-                    severity="medium",
-                    category="visual",
-                    message=f"{scene.id} visual text is long for mobile: {text[:48]}",
-                    suggestion="Keep visual copy keyword-like; move full explanation to narration/subtitles.",
-                )
-            )
-            break
-        narration = _normalize_text(scene.narration)
-        if len(cleaned) >= 14 and cleaned in narration:
-            issues.append(
-                EvaluationIssue(
-                    severity="low",
-                    category="visual",
-                    message=f"{scene.id} visual text repeats narration.",
-                    suggestion="Use shorter keywords on screen and let narration explain the sentence.",
-                )
-            )
-            break
-
     if scene.visual.layout in {"stack", "feature_spotlight", "evidence_grid"}:
         item_count = len(scene.visual.micro_beats or []) or len(scene.visual.bullets)
+        if scene.visual.visual_pages:
+            item_count = max(item_count, max((len(page.items) for page in scene.visual.visual_pages), default=0))
         if item_count > 4:
             issues.append(
                 EvaluationIssue(
@@ -288,8 +285,46 @@ def _evaluate_visual_density(scene, issues: list[EvaluationIssue]) -> None:
             )
 
 
-def _normalize_text(text: str) -> str:
-    return re.sub(r"[\s，。！？、,.!?;；:：/|]+", "", text or "")
+def _evaluate_visible_text_manifest(
+    manifest: dict[str, Any],
+    issues: list[EvaluationIssue],
+    metrics: dict[str, Any],
+) -> None:
+    manifest_issues = manifest.get("issues") if isinstance(manifest.get("issues"), list) else []
+    scenes = manifest.get("scenes") if isinstance(manifest.get("scenes"), list) else []
+    metrics["visible_text_issue_count"] = len(manifest_issues)
+    metrics["visible_text_scene_count"] = len(scenes)
+    metrics["visible_text_entry_count"] = sum(
+        len(scene.get("entries") or []) for scene in scenes if isinstance(scene, dict)
+    )
+    if manifest_issues:
+        sample = manifest_issues[0] if isinstance(manifest_issues[0], dict) else {}
+        issues.append(
+            EvaluationIssue(
+                severity="high",
+                category="visual",
+                message=f"Visible text manifest reports {len(manifest_issues)} policy issue(s).",
+                suggestion=str(sample.get("message") or "Remove narration-like text from non-subtitle visual fields."),
+            )
+        )
+    for scene in scenes:
+        if not isinstance(scene, dict):
+            continue
+        entries = scene.get("entries") if isinstance(scene.get("entries"), list) else []
+        visual_entries = [
+            entry
+            for entry in entries
+            if isinstance(entry, dict) and not entry.get("allowed_from_narration")
+        ]
+        if len(visual_entries) > 18:
+            issues.append(
+                EvaluationIssue(
+                    severity="low",
+                    category="visual",
+                    message=f"{scene.get('scene_id', 'scene')} has {len(visual_entries)} visible text entries.",
+                    suggestion="Consider reducing visual pages or card text density for mobile readability.",
+                )
+            )
 
 
 def _probe_video(video_path: Path, settings: Settings) -> dict[str, Any]:

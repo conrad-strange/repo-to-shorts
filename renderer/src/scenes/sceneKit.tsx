@@ -1,7 +1,7 @@
 import React from 'react';
 import {AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import {resolveAccent, theme} from '../styles/theme';
-import type {MicroBeat, Scene} from '../types';
+import type {MicroBeat, Scene, VisualPage} from '../types';
 
 export const layoutLabel: Record<string, string> = {
   hook: 'Hook',
@@ -20,18 +20,151 @@ export const layoutLabel: Record<string, string> = {
   cta: 'GitHub',
 };
 
+export const PAGE_TRANSITION_SECONDS = 1;
+
 export const getBeats = (scene: Scene, limit = 4): MicroBeat[] => {
   if (scene.visual.micro_beats && scene.visual.micro_beats.length > 0) {
-    return scene.visual.micro_beats.slice(0, limit);
+    const beats = scene.visual.micro_beats
+      .map((beat) => ({...beat, text: normalizeCopy(beat.text)}))
+      .filter((beat) => beat.text);
+    if (beats.length) {
+      return beats.slice(0, limit);
+    }
   }
 
-  const bullets = scene.visual.bullets.length ? scene.visual.bullets : [scene.visual.caption || scene.visual.headline];
+  const bullets = (scene.visual.bullets.length ? scene.visual.bullets : [scene.visual.caption || scene.visual.headline])
+    .map((item) => normalizeCopy(item || ''))
+    .filter(Boolean);
   return bullets.slice(0, limit).map((bullet, index) => ({
     text: bullet,
     kind: 'text',
     emphasis: null,
     start_ratio: index * 0.18,
   }));
+};
+
+export interface VisualPageState {
+  page: VisualPage;
+  index: number;
+  rawPageFrame: number;
+  pageFrame: number;
+  pageDuration: number;
+  pageCount: number;
+}
+
+export interface SceneMotionState {
+  frame: number;
+  fps: number;
+  accent: string;
+  pageState: VisualPageState | null;
+  timingFrame: number;
+  timingDuration: number;
+}
+
+export const useSceneMotion = (scene: Scene): SceneMotionState => {
+  const frame = useCurrentFrame();
+  const {fps} = useVideoConfig();
+  const pageState = visualPageState(scene, frame, fps);
+
+  return {
+    frame,
+    fps,
+    accent: accentOf(scene),
+    pageState,
+    timingFrame: pageState?.pageFrame ?? frame,
+    timingDuration: pageState?.pageDuration ?? scene.duration,
+  };
+};
+
+export const visualPageState = (scene: Scene, frame: number, fps: number): VisualPageState | null => {
+  const pages = normalizedVisualPages(scene);
+  if (!pages.length) {
+    return null;
+  }
+  const pageCount = pages.length;
+  const pageFrames = Math.max(1, Math.round((scene.duration * fps) / pageCount));
+  const index = Math.min(pageCount - 1, Math.max(0, Math.floor(frame / pageFrames)));
+  const rawPageFrame = frame - index * pageFrames;
+  const settledPageFrame = Math.round(fps * 0.4);
+  return {
+    page: pages[index],
+    index,
+    rawPageFrame,
+    pageFrame: index === 0 ? rawPageFrame : Math.max(rawPageFrame, settledPageFrame),
+    pageDuration: Math.max(0.1, pageFrames / fps),
+    pageCount,
+  };
+};
+
+export const visualPageTransition = (pageState: VisualPageState | null, fps: number) => {
+  if (!pageState || pageState.index === 0) {
+    return {opacity: 1, y: 0};
+  }
+  const transitionFrames = Math.max(1, Math.round(PAGE_TRANSITION_SECONDS * fps));
+  const progress = interpolate(pageState.rawPageFrame, [0, transitionFrames], [0, 1], {
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  return {
+    opacity: interpolate(progress, [0, 1], [0.16, 1], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    }),
+    y: interpolate(progress, [0, 1], [34, 0], {
+      extrapolateLeft: 'clamp',
+      extrapolateRight: 'clamp',
+    }),
+  };
+};
+
+export const pageBeats = (
+  scene: Scene,
+  pageState: VisualPageState | null,
+  fallback: MicroBeat[],
+  limit = 4,
+): MicroBeat[] => {
+  const items = pageItems(scene, pageState, fallback.map((beat) => beat.text), limit);
+  if (!items.length) {
+    return fallback.slice(0, limit);
+  }
+  return items.slice(0, limit).map((text, index) => {
+    const previous = fallback[index];
+    return {
+      text,
+      kind: previous?.kind ?? 'text',
+      emphasis: previous?.emphasis ?? null,
+      start_ratio: index * 0.18,
+    };
+  });
+};
+
+export const pageItems = (
+  _scene: Scene,
+  pageState: VisualPageState | null,
+  fallback: string[],
+  limit = 4,
+): string[] => {
+  const items = (pageState?.page.items || []).map((item) => normalizeCopy(item)).filter(Boolean);
+  const fallbackItems = fallback.map((item) => normalizeCopy(item)).filter(Boolean);
+  return (items.length ? items : fallbackItems).slice(0, limit);
+};
+
+export const beatsForScenePage = (scene: Scene, motion: SceneMotionState, limit = 4): MicroBeat[] => {
+  return pageBeats(scene, motion.pageState, getBeats(scene, limit), limit);
+};
+
+export const itemsForScenePage = (
+  scene: Scene,
+  motion: SceneMotionState,
+  fallback: string[],
+  limit = 4,
+): string[] => {
+  return pageItems(scene, motion.pageState, fallback, limit);
+};
+
+export const timingForMotion = (motion: SceneMotionState, startRatio: number) => {
+  return beatTiming(motion.timingFrame, motion.fps, motion.timingDuration, startRatio);
 };
 
 export const beatTiming = (frame: number, fps: number, duration: number, startRatio: number) => {
@@ -58,14 +191,26 @@ export const SceneShell: React.FC<{
   scene: Scene;
   children: React.ReactNode;
   dense?: boolean;
-}> = ({scene, children, dense = false}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const accent = accentOf(scene);
+  motion: SceneMotionState;
+}> = ({scene, children, dense = false, motion}) => {
+  const {frame, fps, accent, pageState} = motion;
   const progress = interpolate(frame, [0, Math.max(1, scene.duration * fps - 1)], [0, 1], {
     extrapolateRight: 'clamp',
   });
-  const title = beatTiming(frame, fps, scene.duration, 0);
+  const titleFrame = pageState ? pageState.pageFrame : frame;
+  const titleDuration = pageState ? pageState.pageDuration : scene.duration;
+  const title = beatTiming(titleFrame, fps, titleDuration, 0);
+  const pageTransition = visualPageTransition(pageState, fps);
+  const headline =
+    normalizeCopy(pageState?.page.title || '') ||
+    normalizeCopy(scene.visual.headline) ||
+    layoutLabel[scene.visual.layout] ||
+    'Scene';
+  const caption =
+    normalizeCopy(pageState?.page.caption || '') ||
+    normalizeCopy(scene.visual.caption || '') ||
+    layoutLabel[scene.visual.layout] ||
+    'Scene';
 
   return (
     <AbsoluteFill
@@ -124,15 +269,25 @@ export const SceneShell: React.FC<{
             fontWeight: 780,
             lineHeight: 1.05,
             letterSpacing: 0,
-            opacity: title.opacity,
-            transform: `translateY(${title.y}px) scale(${title.scale})`,
+            opacity: title.opacity * pageTransition.opacity,
+            transform: `translateY(${title.y + pageTransition.y}px) scale(${title.scale})`,
           }}
         >
-          <HighlightText text={scene.visual.headline} accent={accent} />
+          <HighlightText text={headline} accent={accent} />
         </div>
       </div>
 
-      <div style={{position: 'absolute', left: 88, right: 88, top: dense ? 520 : 590, bottom: 245}}>
+      <div
+        style={{
+          position: 'absolute',
+          left: 88,
+          right: 88,
+          top: dense ? 520 : 590,
+          bottom: 245,
+          opacity: pageTransition.opacity,
+          transform: `translateY(${pageTransition.y}px)`,
+        }}
+      >
         {children}
       </div>
 
@@ -147,10 +302,12 @@ export const SceneShell: React.FC<{
           gap: 24,
           color: theme.muted,
           fontSize: 24,
+          opacity: pageTransition.opacity,
+          transform: `translateY(${pageTransition.y * 0.35}px)`,
         }}
       >
         <span style={{maxWidth: 720, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
-          {normalizeCopy(scene.visual.caption || layoutLabel[scene.visual.layout] || 'Scene')}
+          {normalizeCopy(caption)}
         </span>
         <span>{Math.max(1, Math.round(scene.duration))}s</span>
       </div>
@@ -163,10 +320,14 @@ export const BeatLine: React.FC<{
   index: number;
   scene: Scene;
   accent: string;
-}> = ({beat, index, scene, accent}) => {
+  frameOverride?: number;
+  durationOverride?: number;
+}> = ({beat, index, scene, accent, frameOverride, durationOverride}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
-  const timing = beatTiming(frame, fps, scene.duration, beat.start_ratio ?? index * 0.18);
+  const localFrame = frameOverride ?? frame;
+  const duration = durationOverride ?? scene.duration;
+  const timing = beatTiming(localFrame, fps, duration, beat.start_ratio ?? index * 0.18);
 
   return (
     <div
@@ -232,7 +393,18 @@ export const HighlightText: React.FC<{text: string; accent: string}> = ({text, a
   );
 };
 
-export const normalizeCopy = (value: string) => value.replace(/READNE/gi, 'README');
+export const normalizeCopy = (value: string) => {
+  return String(value || '').replace(/READNE/gi, 'README').replace(/\s+/g, ' ').trim();
+};
+
+const normalizedVisualPages = (scene: Scene): VisualPage[] =>
+  (scene.visual.visual_pages || [])
+    .map((page) => ({
+      title: normalizeCopy(String(page.title || '').trim()),
+      caption: page.caption ? normalizeCopy(String(page.caption).trim()) : null,
+      items: (page.items || []).map((item) => normalizeCopy(String(item || '').trim())).filter(Boolean),
+    }))
+    .filter((page) => page.title || page.caption || page.items.length);
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

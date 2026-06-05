@@ -117,7 +117,7 @@ export const TextScene: React.FC<{scene: Scene}> = ({scene}) => {
           fontSize: 28,
         }}
       >
-        <span>{scene.visual.caption || scene.narration.slice(0, 20)}</span>
+        <span>{scene.visual.caption || layoutLabel[scene.visual.layout] || '项目讲解'}</span>
         <span>{Math.max(1, Math.round(scene.duration))}s</span>
       </div>
     </AbsoluteFill>
@@ -290,7 +290,7 @@ const CodeBody: React.FC<{
   fps: number;
   accent: string;
 }> = ({scene, beats, frame, fps, accent}) => {
-  const code = scene.visual.code || beats.find((beat) => beat.kind === 'code')?.text || 'streamlit run app.py';
+  const code = scene.visual.code || beats.find((beat) => beat.kind === 'code')?.text || '';
   const opacity = interpolate(frame, [2, 10], [0.36, 1], {extrapolateRight: 'clamp'});
   const y = interpolate(frame, [2, 10], [16, 0], {extrapolateRight: 'clamp'});
 
@@ -393,7 +393,7 @@ const getBeats = (scene: Scene): MicroBeat[] => {
     return scene.visual.micro_beats.slice(0, 4);
   }
 
-  const bullets = scene.visual.bullets.length ? scene.visual.bullets : [scene.narration];
+  const bullets = scene.visual.bullets.length ? scene.visual.bullets : [scene.visual.caption || scene.visual.headline || '项目讲解'];
   return bullets.slice(0, 4).map((bullet, index) => ({
     text: bullet,
     kind: 'text',

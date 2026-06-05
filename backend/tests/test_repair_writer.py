@@ -95,3 +95,51 @@ def test_apply_repair_payload_normalizes_readme_typo() -> None:
     assert script.segments[0].narration == "README 内容来自仓库。"
     assert storyboard.scenes[0].visual.headline == "README 证据"
     assert storyboard.scenes[0].visual.bullets == ["README 摘要"]
+
+
+def test_apply_repair_payload_filters_visible_direction_text() -> None:
+    script = VideoScript(
+        title="Demo",
+        segments=[ScriptSegment(scene_hint="hook", narration="Old.")],
+        full_text="Old.",
+    )
+    storyboard = Storyboard(
+        title="Demo",
+        scenes=[
+            Scene(
+                id="scene-001",
+                type="github_hero",
+                start=0,
+                duration=5,
+                narration="Old.",
+                visual=VisualSpec(layout="github_hero", headline="Repo", bullets=["Old"]),
+            )
+        ],
+    )
+
+    apply_repair_payload(
+        script,
+        storyboard,
+        {
+            "storyboard_scenes": [
+                {
+                    "id": "scene-001",
+                    "visual": {
+                        "headline": "镜头聚焦GitHub仓库",
+                        "caption": "文字弹出",
+                        "bullets": ["克隆仓库动画", "文件列表展示"],
+                        "micro_beats": [
+                            {"text": "镜头聚焦GitHub仓库", "kind": "text"},
+                            {"text": "文字弹出", "kind": "text"},
+                        ],
+                    },
+                }
+            ],
+        },
+    )
+
+    scene = storyboard.scenes[0]
+    assert scene.visual.headline == "GitHub 仓库"
+    assert scene.visual.caption is None
+    assert scene.visual.bullets == ["克隆仓库", "文件列表"]
+    assert [beat.text for beat in scene.visual.micro_beats] == ["GitHub 仓库"]

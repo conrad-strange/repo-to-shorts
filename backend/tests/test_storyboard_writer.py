@@ -76,6 +76,36 @@ def test_sanitize_storyboard_payload_adds_micro_beats_from_bullets() -> None:
     assert beats[1]["start_ratio"] > beats[0]["start_ratio"]
 
 
+def test_sanitize_storyboard_payload_removes_visible_direction_text() -> None:
+    payload = sanitize_storyboard_payload(
+        {
+            "title": "Demo",
+            "scenes": [
+                {
+                    "id": "scene-001",
+                    "type": "github_hero",
+                    "visual": {
+                        "layout": "github_hero",
+                        "headline": "镜头聚焦GitHub仓库",
+                        "caption": "文字弹出",
+                        "bullets": ["克隆仓库动画", "文件列表展示"],
+                        "micro_beats": [
+                            {"text": "镜头聚焦GitHub仓库", "kind": "text"},
+                            {"text": "文字弹出", "kind": "text"},
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+
+    visual = payload["scenes"][0]["visual"]
+    assert visual["headline"] == "GitHub 仓库"
+    assert visual["caption"] is None
+    assert visual["bullets"] == ["克隆仓库", "文件列表"]
+    assert [beat["text"] for beat in visual["micro_beats"]] == ["GitHub 仓库"]
+
+
 def test_sanitize_storyboard_payload_normalizes_animation_aliases() -> None:
     payload = sanitize_storyboard_payload(
         {

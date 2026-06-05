@@ -1,21 +1,20 @@
 import React from 'react';
-import {interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+import {interpolate} from 'remotion';
 import {theme} from '../styles/theme';
 import type {Scene} from '../types';
-import {accentOf, beatTiming, getBeats, HighlightText, SceneShell} from './sceneKit';
+import {beatsForScenePage, HighlightText, SceneShell, timingForMotion, useSceneMotion} from './sceneKit';
 
 export const ReadmeFocusScene: React.FC<{scene: Scene}> = ({scene}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const accent = accentOf(scene);
-  const beats = getBeats(scene, 3);
-  const card = beatTiming(frame, fps, scene.duration, 0.08);
-  const scanX = interpolate(frame, [0, Math.max(1, scene.duration * fps)], [-80, 820], {
+  const motion = useSceneMotion(scene);
+  const {accent, timingFrame, timingDuration, fps} = motion;
+  const beats = beatsForScenePage(scene, motion, 3);
+  const card = timingForMotion(motion, 0.08);
+  const scanX = interpolate(timingFrame, [0, Math.max(1, timingDuration * fps)], [-80, 820], {
     extrapolateRight: 'clamp',
   });
 
   return (
-    <SceneShell scene={scene} dense>
+    <SceneShell scene={scene} dense motion={motion}>
       <div
         style={{
           borderRadius: 8,
@@ -85,7 +84,7 @@ export const ReadmeFocusScene: React.FC<{scene: Scene}> = ({scene}) => {
 
             <div style={{display: 'grid', gap: 18}}>
               {beats.map((beat, index) => {
-                const timing = beatTiming(frame, fps, scene.duration, beat.start_ratio ?? index * 0.2);
+                const timing = timingForMotion(motion, beat.start_ratio ?? index * 0.2);
                 return (
                   <div
                     key={`${beat.text}-${index}`}

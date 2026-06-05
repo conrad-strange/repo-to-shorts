@@ -73,6 +73,8 @@ def _build_insight_input(insight: ProjectInsight, settings: Settings, user_brief
         {
             "video_mode": settings.video_mode,
             "mode_notes": _mode_notes(settings.video_mode),
+            "brand_mode": settings.brand_mode,
+            "brand_notes": _brand_notes(settings.brand_mode),
             "storytelling_mode": settings.storytelling_mode,
             "storytelling_notes": _storytelling_notes(settings.storytelling_mode),
             "user_brief": user_brief or "",
@@ -91,10 +93,29 @@ def _build_insight_input(insight: ProjectInsight, settings: Settings, user_brief
 
 def _mode_notes(video_mode: str) -> str:
     if video_mode == "short_30s":
-        return "Aim for 30-40 seconds: pain point, what it does, one core highlight, GitHub CTA."
+        return (
+            "Write voiceover for about 30-45 seconds at TTS_RATE +30% or faster. "
+            "Use roughly 220-330 Chinese characters: pain point, what it does, one core highlight, GitHub CTA."
+        )
     if video_mode == "technical_90s":
-        return "Aim for 75-90 seconds: include architecture, usage, and one concise code or implementation detail scene."
-    return "Aim for 45-60 seconds: hook, project value, core flow, highlights, usage/CTA."
+        return (
+            "Write voiceover for about 90-105 seconds at TTS_RATE +30% or faster. "
+            "Use roughly 650-850 Chinese characters: architecture, usage, evidence, and concise implementation details."
+        )
+    return (
+        "Write voiceover for about 58-72 seconds at TTS_RATE +30% or faster. "
+        "Use roughly 430-560 Chinese characters: hook, project value, core flow, credible highlights, usage/CTA."
+    )
+
+
+def _brand_notes(brand_mode: str) -> str:
+    if str(brand_mode).strip().lower() in {"rb", "repo-to-bombs", "bomb", "bombs"}:
+        return "Repo to Bombs is an entertainment wrapper: allow a playful bomb-style opener, but keep facts evidence-backed."
+    return (
+        "Repo to Shorts should use the same high-energy short-video pacing as the entertainment mode, "
+        "but without bomb-circle gimmicks: strong first sentence, compact transitions, dense narration, light humor, "
+        "and no long explanatory filler."
+    )
 
 
 def _storytelling_notes(storytelling_mode: str) -> str:

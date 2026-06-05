@@ -11,8 +11,9 @@ from urllib.parse import urlparse
 
 from gva.config import Settings
 from gva.core.render_bridge import find_browser
+from gva.core.visible_text import clean_visible_text, clean_visible_text_list
 from gva.models.repo import RepoSummary
-from gva.models.storyboard import MicroBeat, Storyboard
+from gva.models.storyboard import MicroBeat, Scene, Storyboard
 
 
 @dataclass
@@ -430,16 +431,71 @@ def _repo_evidence_lines(repo_summary: RepoSummary, readme: ReadmeEvidence) -> l
 
 def _compact_visual_language(storyboard: Storyboard) -> None:
     for scene in storyboard.scenes:
-        scene.visual.headline = _short_headline(scene.visual.headline)
-        scene.visual.bullets = [_short_phrase(item, 24) for item in scene.visual.bullets[:3]]
-        scene.visual.micro_beats = [
-            beat.model_copy(update={"text": _short_phrase(_viewer_facing_beat_text(beat.text), 24)})
-            for beat in (scene.visual.micro_beats or [])[:4]
-            if beat.text.strip()
-        ]
+        scene.visual.headline = clean_visible_text(_short_headline(scene.visual.headline), limit=18) or _caption_fallback(scene) or "项目讲解"
+        scene.visual.caption = clean_visible_text(_short_caption(scene), limit=14) if _short_caption(scene) else None
+        scene.visual.bullets = clean_visible_text_list([_short_phrase(item, 24) for item in scene.visual.bullets[:3]], limit=24)
+        scene.visual.diagram_nodes = clean_visible_text_list(scene.visual.diagram_nodes[:6], limit=42)
+        cleaned_beats = []
+        for beat in (scene.visual.micro_beats or [])[:4]:
+            text = clean_visible_text(_short_phrase(_viewer_facing_beat_text(beat.text), 24), limit=24)
+            if text:
+                cleaned_beats.append(beat.model_copy(update={"text": text}))
+        scene.visual.micro_beats = cleaned_beats
         if scene.visual.code:
             lines = [line[:80] for line in scene.visual.code.splitlines()[:8]]
             scene.visual.code = "\n".join(lines)
+
+
+def _short_caption(scene: Scene) -> str | None:
+    caption = _strip_markdown(scene.visual.caption or "")
+    narration = _strip_markdown(scene.narration)
+    if not caption:
+        return None
+    if _visual_text_repeats_narration(caption, narration) or len(caption) > 18:
+        return _caption_fallback(scene)
+    return _short_phrase(caption, 14)
+
+
+def _visual_text_repeats_narration(text: str, narration: str) -> bool:
+    cleaned = _normalize_for_overlap(text)
+    spoken = _normalize_for_overlap(narration)
+    if not cleaned or not spoken:
+        return False
+    return len(cleaned) >= 12 and (cleaned in spoken or spoken.startswith(cleaned))
+
+
+def _caption_fallback(scene: Scene) -> str | None:
+    layout = scene.visual.layout
+    headline = _strip_markdown(scene.visual.headline)
+    bullets = [_strip_markdown(item) for item in scene.visual.bullets if _strip_markdown(item)]
+    joined = " ".join([headline, *bullets]).lower()
+    if layout in {"hook", "github_hero"}:
+        if "github" in joined and "视频" in joined:
+            return "仓库到短视频"
+        if "readme" in joined:
+            return "README 变短片"
+        return "先看核心价值"
+    if layout == "readme_focus":
+        return "README 证据"
+    if layout in {"architecture_map", "flow"}:
+        return "流程一眼看懂"
+    if layout == "evidence_grid":
+        return "证据先说话"
+    if layout in {"feature_spotlight", "stack", "steps"}:
+        return "核心亮点"
+    if layout == "code":
+        return "真实代码片段"
+    if layout == "result_media":
+        return "真实使用画面"
+    if layout == "cta":
+        return "查看 GitHub"
+    if bullets:
+        return _short_phrase(bullets[0], 14)
+    return None
+
+
+def _normalize_for_overlap(text: str) -> str:
+    return re.sub(r"[\W_]+", "", text.lower(), flags=re.UNICODE)
 
 
 def _write_manifest(output_dir: Path, manifest: dict) -> None:
@@ -454,7 +510,7 @@ def _write_manifest(output_dir: Path, manifest: dict) -> None:
 def _sanitize_setup_visuals(storyboard: Storyboard) -> None:
     for scene in storyboard.scenes:
         visual = scene.visual
-        if _is_setup_or_command(scene.narration):
+        if _is_setup_narration(scene.narration):
             scene.narration = "打开项目后，可以体验它的核心功能。"
         if visual.focus_target == "install_command":
             visual.focus_target = "none"
@@ -510,6 +566,21 @@ def _is_setup_or_command(text: str) -> bool:
     return _looks_like_command(cleaned) or _looks_like_setup_text(cleaned)
 
 
+def _is_setup_narration(text: str) -> bool:
+    cleaned = text.strip().removeprefix("$ ").strip()
+    lowered = cleaned.lower()
+    if not cleaned:
+        return False
+    if _looks_like_command(cleaned):
+        return True
+    if re.search(r"\b(?:pip|npm|pnpm|yarn|conda|docker)\s+(?:install|run|start|build|create|activate)\b", lowered):
+        return True
+    if re.search(r"\b(?:git\s+clone|streamlit\s+run)\b", lowered):
+        return True
+    starts_like_setup = cleaned.startswith(("先运行", "运行", "执行", "输入", "安装", "配置", "启动", "设置"))
+    return starts_like_setup and _looks_like_setup_text(cleaned)
+
+
 def _extract_readme_highlight(line: str) -> str | None:
     if not line or _looks_like_setup_text(line) or _looks_like_command(line):
         return None
@@ -541,7 +612,6 @@ def _looks_like_setup_text(text: str) -> bool:
         "quick start",
         "requirements",
         "environment",
-        "env",
         "conda",
         "pip ",
         "npm ",

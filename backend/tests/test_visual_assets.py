@@ -186,6 +186,139 @@ def test_prepare_visual_assets_falls_back_when_chrome_missing(tmp_path, monkeypa
     assert enhanced.scenes[0].visual.layout == "hook"
 
 
+def test_prepare_visual_assets_rewrites_caption_that_repeats_narration(tmp_path) -> None:
+    narration = "写了几千行代码，README 却没人看？试试 Repo to Shorts——输入一个 GitHub 链接，生成中文竖屏讲解视频。"
+    settings = Settings()
+    summary = RepoSummary(source="demo", repo_name="repo-to-shorts", files=[], tree_overview="")
+    storyboard = Storyboard(
+        title="Demo",
+        scenes=[
+            Scene(
+                id="scene-001",
+                type="hook",
+                start=0,
+                duration=4,
+                narration=narration,
+                visual=VisualSpec(
+                    layout="hook",
+                    headline="README 没人看？",
+                    caption=narration,
+                    bullets=["输入 GitHub 链接", "生成竖屏视频"],
+                ),
+            )
+        ],
+    )
+
+    enhanced = prepare_visual_assets(
+        output_dir=tmp_path / "out",
+        renderer_dir=tmp_path / "renderer",
+        repo_summary=summary,
+        storyboard=storyboard,
+        repo_url=None,
+        settings=settings,
+    )
+
+    caption = enhanced.scenes[0].visual.caption
+    assert caption == "仓库到短视频"
+    assert caption not in narration
+    assert len(caption) <= 14
+
+
+def test_prepare_visual_assets_keeps_evidence_narration_with_env_example(tmp_path) -> None:
+    settings = Settings()
+    summary = RepoSummary(source="demo", repo_name="demo", files=[], tree_overview="")
+    narration = "它凭什么说真话？背后有个证据索引模块，把 README、.env.example、依赖文件等抽成事实列表。"
+    storyboard = Storyboard(
+        title="Demo",
+        scenes=[
+            Scene(
+                id="scene-001",
+                type="evidence_grid",
+                start=0,
+                duration=8,
+                narration=narration,
+                visual=VisualSpec(
+                    layout="evidence_grid",
+                    headline="证据链：不说假话",
+                    bullets=["README", ".env.example", "依赖文件"],
+                ),
+            )
+        ],
+    )
+
+    enhanced = prepare_visual_assets(
+        output_dir=tmp_path / "out",
+        renderer_dir=tmp_path / "renderer",
+        repo_summary=summary,
+        storyboard=storyboard,
+        repo_url=None,
+        settings=settings,
+    )
+
+    assert enhanced.scenes[0].narration == narration
+
+
+def test_prepare_visual_assets_does_not_assign_motion_assets(tmp_path) -> None:
+    settings = Settings()
+    summary = RepoSummary(source="demo", repo_name="demo", files=[], tree_overview="")
+    storyboard = Storyboard(
+        title="Demo",
+        scenes=[
+            Scene(
+                id="scene-001",
+                type="hook",
+                start=0,
+                duration=4,
+                narration="Hook",
+                visual=VisualSpec(layout="hook", headline="Hook"),
+            ),
+            Scene(
+                id="scene-002",
+                type="flow",
+                start=4,
+                duration=12,
+                narration="Workflow",
+                visual=VisualSpec(
+                    layout="flow",
+                    headline="Workflow",
+                    diagram_nodes=["Scan", "Index", "Render"],
+                ),
+            ),
+            Scene(
+                id="scene-003",
+                type="code",
+                start=16,
+                duration=8,
+                narration="Code",
+                visual=VisualSpec(layout="code", headline="Code", code="print('ok')"),
+            ),
+            Scene(
+                id="scene-004",
+                type="cta",
+                start=24,
+                duration=4,
+                narration="CTA",
+                visual=VisualSpec(layout="cta", headline="CTA"),
+            ),
+        ],
+    )
+
+    enhanced = prepare_visual_assets(
+        output_dir=tmp_path / "out",
+        renderer_dir=tmp_path / "renderer",
+        repo_summary=summary,
+        storyboard=storyboard,
+        repo_url=None,
+        settings=settings,
+    )
+    manifest = json.loads((tmp_path / "out" / "logs" / "visual-assets-manifest.json").read_text(encoding="utf-8"))
+
+    assert enhanced.scenes[1].visual.layout == "architecture_map"
+    assert enhanced.scenes[1].visual.motion_asset == "none"
+    assert enhanced.scenes[2].visual.motion_asset == "none"
+    assert not any("motion_asset" in item for item in manifest["annotations"])
+
+
 def test_prepare_visual_assets_uses_cached_screenshot_when_refresh_fails(tmp_path, monkeypatch) -> None:
     def fake_run(command, **kwargs):
         return SimpleNamespace(returncode=1, stdout="", stderr="chrome failed")

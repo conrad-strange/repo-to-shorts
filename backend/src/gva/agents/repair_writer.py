@@ -9,6 +9,7 @@ from openai import BadRequestError
 from gva.config import Settings
 from gva.core.json_utils import loads_json_object
 from gva.core.llm_client import build_openai_client, get_generation_model
+from gva.core.visible_text import clean_visible_text
 from gva.models.evidence import ClaimCheck, EvidenceIndex, VerificationReport
 from gva.models.script import VideoScript
 from gva.models.storyboard import MicroBeat, Storyboard
@@ -120,23 +121,23 @@ def apply_repair_payload(
         visual = raw.get("visual")
         if not isinstance(visual, dict):
             continue
-        headline = _clean_text(visual.get("headline"), limit=36)
+        headline = _clean_visible_text(visual.get("headline"), limit=36)
         if headline and scene.visual.headline != headline:
             changes.append({"target": f"{scene.id}.visual.headline", "old": scene.visual.headline, "new": headline})
             scene.visual.headline = headline
 
-        caption = _clean_text(visual.get("caption"), limit=42)
-        if caption is not None and scene.visual.caption != caption:
+        caption = _clean_visible_text(visual.get("caption"), limit=42)
+        if "caption" in visual and scene.visual.caption != caption:
             changes.append({"target": f"{scene.id}.visual.caption", "old": scene.visual.caption, "new": caption})
             scene.visual.caption = caption
 
-        bullets = [_clean_text(item, limit=28) for item in _list_of_strings(visual.get("bullets"))]
+        bullets = [_clean_visible_text(item, limit=28) for item in _list_of_strings(visual.get("bullets"))]
         bullets = [item for item in bullets if item][:3]
         if bullets and scene.visual.bullets != bullets:
             changes.append({"target": f"{scene.id}.visual.bullets", "old": scene.visual.bullets, "new": bullets})
             scene.visual.bullets = bullets
 
-        diagram_nodes = [_clean_text(item, limit=42) for item in _list_of_strings(visual.get("diagram_nodes"))]
+        diagram_nodes = [_clean_visible_text(item, limit=42) for item in _list_of_strings(visual.get("diagram_nodes"))]
         diagram_nodes = [item for item in diagram_nodes if item][:6]
         if diagram_nodes and scene.visual.diagram_nodes != diagram_nodes:
             changes.append(
@@ -202,6 +203,8 @@ def _repair_prompt() -> str:
         "Do not include install commands, API-key setup, or exaggerated marketing claims. "
         "Keep Chinese narration natural for a short vertical video. "
         "Keep visual text short: headline <= 12 Chinese chars when possible, bullets <= 8 Chinese chars. "
+        "Visual fields are rendered as on-screen text; never write camera, animation, or director notes such as "
+        "'文字弹出', '镜头聚焦', '克隆仓库动画', '文件列表展示', or '第一步高亮'. "
         "Do not add, remove, or reorder scenes. Preserve repo names, technical terms, and evidence refs. "
         "Return strict JSON with keys: script_segments, storyboard_scenes, notes. "
         "script_segments items: {index, narration}. "
@@ -292,7 +295,7 @@ def _micro_beats_from_payload(value: object) -> list[MicroBeat]:
             raw = {"text": raw}
         if not isinstance(raw, dict):
             continue
-        text = _clean_text(raw.get("text"), limit=28)
+        text = _clean_visible_text(raw.get("text"), limit=28)
         if not text:
             continue
         kind = str(raw.get("kind") or "text")
@@ -323,6 +326,10 @@ def _clean_text(value: object, limit: int) -> str | None:
     text = " ".join(part for part in text.split() if part)
     text = _normalize_terms(text)
     return text[:limit]
+
+
+def _clean_visible_text(value: object, limit: int) -> str | None:
+    return clean_visible_text(value, limit=limit)
 
 
 def _normalize_terms(text: str) -> str:

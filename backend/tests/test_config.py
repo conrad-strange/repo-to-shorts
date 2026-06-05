@@ -3,6 +3,10 @@ from pathlib import Path
 from gva.config import Settings
 
 
+def test_settings_default_r2s_tts_rate_is_fast() -> None:
+    assert Settings(_env_file=None).tts_rate == "+32%"
+
+
 def test_settings_treats_empty_optional_values_as_none(tmp_path: Path) -> None:
     env_path = tmp_path / ".env"
     env_path.write_text(

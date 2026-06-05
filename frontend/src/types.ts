@@ -2,6 +2,12 @@ export type VideoMode = 'short_30s' | 'standard_60s' | 'technical_90s';
 export type RenderProfile = 'preview' | 'final';
 export type BrandMode = 'rs' | 'rb';
 
+export interface VisualPage {
+  title: string;
+  caption?: string | null;
+  items: string[];
+}
+
 export interface VisualSpec {
   layout: string;
   headline: string;
@@ -20,6 +26,9 @@ export interface VisualSpec {
   repo_url?: string | null;
   repo_display_url?: string | null;
   media_type?: 'image' | 'video' | 'none';
+  motion_asset?: 'data_flow' | 'code_scan' | 'evidence_pulse' | 'repo_pulse' | 'spark_burst' | 'none';
+  motion_delay_ratio?: number;
+  visual_pages?: VisualPage[];
 }
 
 export interface CaptionCue {
@@ -28,6 +37,27 @@ export interface CaptionCue {
   text: string;
   keywords?: string[];
   source_scene_id?: string;
+}
+
+export interface VisibleTextManifestEntry {
+  source: string;
+  text: string;
+  editable?: boolean;
+  allowed_from_narration?: boolean;
+  overlaps_narration?: boolean;
+  too_long?: boolean;
+}
+
+export interface VisibleTextManifestScene {
+  scene_id: string;
+  layout?: string;
+  narration_length?: number;
+  entries: VisibleTextManifestEntry[];
+}
+
+export interface VisibleTextManifest {
+  issues?: Array<Record<string, unknown>>;
+  scenes: VisibleTextManifestScene[];
 }
 
 export interface Scene {
@@ -62,12 +92,14 @@ export interface RunFiles {
 export interface RunDetail {
   project_id: string;
   run_id: string;
+  run_label?: string;
   project_root: string;
   run_dir: string;
   metadata: Record<string, unknown>;
   repo_summary?: Record<string, unknown> | null;
   script_markdown?: string | null;
   storyboard?: Storyboard | null;
+  visible_text_manifest?: VisibleTextManifest | null;
   verification?: Record<string, unknown> | null;
   evaluation?: Record<string, unknown> | null;
   files: RunFiles;
@@ -77,6 +109,7 @@ export interface ProjectItem {
   id: string;
   path: string;
   runs: string[];
+  run_labels?: Record<string, string>;
 }
 
 export interface WorkflowRequest {
@@ -122,6 +155,7 @@ export interface JobDetail {
 
 export interface RerenderPayload {
   render_profile: string;
+  video_mode?: VideoMode;
   user_brief?: string;
   brand_mode?: BrandMode;
   bomb_circle?: string;

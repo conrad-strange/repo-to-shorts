@@ -1,21 +1,21 @@
 import React from 'react';
-import {interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+import {interpolate} from 'remotion';
 import {theme} from '../styles/theme';
 import type {Scene} from '../types';
-import {accentOf, BeatLine, getBeats, SceneShell} from './sceneKit';
+import {BeatLine, beatsForScenePage, itemsForScenePage, SceneShell, useSceneMotion} from './sceneKit';
 
 export const PromiseScene: React.FC<{scene: Scene}> = ({scene}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const accent = accentOf(scene);
-  const beats = getBeats(scene, 3);
-  const lineWidth = interpolate(frame, [8, 22], [0, 100], {
+  const motion = useSceneMotion(scene);
+  const {accent, timingFrame, timingDuration, fps} = motion;
+  const beats = beatsForScenePage(scene, motion, 3);
+  const pageBullets = itemsForScenePage(scene, motion, scene.visual.bullets, 2);
+  const lineWidth = interpolate(timingFrame, [8, 22], [0, 100], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
 
   return (
-    <SceneShell scene={scene}>
+    <SceneShell scene={scene} motion={motion}>
       <div style={{display: 'grid', gap: 34}}>
         <div
           style={{
@@ -26,7 +26,15 @@ export const PromiseScene: React.FC<{scene: Scene}> = ({scene}) => {
         />
         <div style={{display: 'grid', gap: 30}}>
           {beats.map((beat, index) => (
-            <BeatLine key={`${beat.text}-${index}`} beat={beat} index={index} scene={scene} accent={accent} />
+            <BeatLine
+              key={`${beat.text}-${index}`}
+              beat={beat}
+              index={index}
+              scene={scene}
+              accent={accent}
+              frameOverride={timingFrame}
+              durationOverride={timingDuration}
+            />
           ))}
         </div>
         <div
@@ -37,10 +45,13 @@ export const PromiseScene: React.FC<{scene: Scene}> = ({scene}) => {
             gap: 14,
           }}
         >
-          {scene.visual.bullets.slice(0, 2).map((bullet, index) => {
+          {pageBullets.map((bullet, index) => {
             const opacity = interpolate(
-              frame,
-              [Math.round((0.52 + index * 0.12) * scene.duration * fps), Math.round((0.52 + index * 0.12) * scene.duration * fps) + 8],
+              timingFrame,
+              [
+                Math.round((0.52 + index * 0.12) * timingDuration * fps),
+                Math.round((0.52 + index * 0.12) * timingDuration * fps) + 8,
+              ],
               [0, 1],
               {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
             );

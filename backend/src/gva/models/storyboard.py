@@ -23,6 +23,7 @@ SceneAnimation = Literal["fade", "slide", "rise", "zoom", "none"]
 MicroBeatKind = Literal["text", "metric", "code", "flow", "warning", "cta"]
 VisualAssetType = Literal["github_repo_home", "readme_focus", "none"]
 VisualFocusTarget = Literal["repo_name", "readme_title", "install_command", "readme_section", "none"]
+MotionAsset = Literal["data_flow", "code_scan", "evidence_pulse", "repo_pulse", "spark_burst", "none"]
 
 
 class MicroBeat(BaseModel):
@@ -38,6 +39,12 @@ class CaptionCue(BaseModel):
     text: str
     keywords: list[str] = Field(default_factory=list)
     source_scene_id: str
+
+
+class VisualPage(BaseModel):
+    title: str
+    caption: str | None = None
+    items: list[str] = Field(default_factory=list)
 
 
 class VisualSpec(BaseModel):
@@ -58,6 +65,9 @@ class VisualSpec(BaseModel):
     repo_display_url: str | None = None
     media_type: Literal["image", "video", "none"] = "none"
     evidence_refs: list[str] = Field(default_factory=list)
+    motion_asset: MotionAsset = "none"
+    motion_delay_ratio: float = Field(default=0.54, ge=0.0, le=0.9)
+    visual_pages: list[VisualPage] = Field(default_factory=list)
 
 
 class Scene(BaseModel):

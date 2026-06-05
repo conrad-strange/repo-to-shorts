@@ -1,15 +1,16 @@
 import React from 'react';
-import {Easing, interpolate, OffthreadVideo, staticFile, spring, useCurrentFrame, useVideoConfig} from 'remotion';
+import {Easing, interpolate, OffthreadVideo, staticFile, spring} from 'remotion';
 import type {Scene} from '../types';
 import {theme} from '../styles/theme';
-import {accentOf, SceneShell} from './sceneKit';
+import {normalizeCopy, SceneShell, useSceneMotion} from './sceneKit';
 
 export const ResultMediaScene: React.FC<{scene: Scene}> = ({scene}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const accent = accentOf(scene);
+  const motion = useSceneMotion(scene);
+  const {frame, fps, accent, pageState} = motion;
   const asset = scene.visual.asset_path;
   const isVideo = scene.visual.media_type === 'video';
+  const headline = normalizeCopy(pageState?.page.title || '') || normalizeCopy(scene.visual.headline) || '结果画面';
+  const caption = normalizeCopy(pageState?.page.caption || '') || normalizeCopy(scene.visual.caption || '') || 'Result preview';
   const intro = spring({frame, fps, config: {damping: 18, stiffness: 110}});
   const y = interpolate(intro, [0, 1], [34, 0]);
   const scale = interpolate(frame, [0, scene.duration * fps], [1.015, 1.06], {
@@ -23,7 +24,7 @@ export const ResultMediaScene: React.FC<{scene: Scene}> = ({scene}) => {
   });
 
   return (
-    <SceneShell scene={scene} dense>
+    <SceneShell scene={scene} dense motion={motion}>
       <div
         style={{
           display: 'grid',
@@ -51,7 +52,7 @@ export const ResultMediaScene: React.FC<{scene: Scene}> = ({scene}) => {
               padding: '18px 22px',
             }}
           >
-            <span>{scene.visual.caption || 'Result preview'}</span>
+            <span>{caption}</span>
             <span style={{color: accent, fontWeight: 800}}>Live result</span>
           </div>
           <div
@@ -100,7 +101,7 @@ export const ResultMediaScene: React.FC<{scene: Scene}> = ({scene}) => {
             paddingLeft: 18,
           }}
         >
-          {scene.visual.headline || '结果画面'}
+          {headline}
         </div>
       </div>
     </SceneShell>

@@ -1,4 +1,4 @@
-from gva.models.storyboard import MicroBeat, Scene, Storyboard, VisualSpec
+from gva.models.storyboard import MicroBeat, Scene, Storyboard, VisualPage, VisualSpec
 from gva.core.render_bridge import _render_scale_for_profile, _storyboard_for_render
 
 
@@ -37,6 +37,28 @@ def test_visual_spec_accepts_asset_fields() -> None:
     assert visual.asset_type == "github_repo_home"
     assert visual.focus_target == "repo_name"
     assert visual.repo_display_url == "github.com/example/demo"
+
+
+def test_visual_spec_accepts_motion_fields() -> None:
+    visual = VisualSpec(
+        layout="architecture_map",
+        headline="Workflow",
+        motion_asset="data_flow",
+        motion_delay_ratio=0.62,
+    )
+
+    assert visual.motion_asset == "data_flow"
+    assert visual.motion_delay_ratio == 0.62
+
+
+def test_visual_spec_accepts_visual_pages() -> None:
+    visual = VisualSpec(
+        layout="feature_spotlight",
+        headline="Workflow",
+        visual_pages=[VisualPage(title="第一页", caption="短句", items=["扫描", "渲染"])],
+    )
+
+    assert visual.visual_pages[0].items == ["扫描", "渲染"]
 
 
 def test_render_profile_preview_uses_smaller_composition() -> None:

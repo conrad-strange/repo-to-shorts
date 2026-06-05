@@ -1,11 +1,22 @@
 import {type PointerEvent, useEffect, useMemo, useRef, useState} from 'react';
 import {api} from './api';
-import type {BrandMode, JobDetail, JobEvent, ProjectItem, RenderProfile, RunDetail, Scene, Storyboard, VideoMode} from './types';
+import type {
+  BrandMode,
+  JobDetail,
+  JobEvent,
+  ProjectItem,
+  RenderProfile,
+  RunDetail,
+  Scene,
+  Storyboard,
+  VideoMode,
+  VisualPage,
+} from './types';
 
 const videoModes: Array<{value: VideoMode; label: string; hint: string}> = [
-  {value: 'short_30s', label: '30s', hint: '痛点、价值、CTA'},
-  {value: 'standard_60s', label: '60s', hint: '增加流程和用法'},
-  {value: 'technical_90s', label: '90s', hint: '加入代码细节'},
+  {value: 'short_30s', label: '30s', hint: '30-59s'},
+  {value: 'standard_60s', label: '60s', hint: '60-89s'},
+  {value: 'technical_90s', label: '90s', hint: '90-120s'},
 ];
 
 const renderProfiles: Array<{value: RenderProfile; label: string; hint: string}> = [
@@ -97,6 +108,12 @@ export function App() {
   const [addSceneVideoEnd, setAddSceneVideoEnd] = useState(6);
   const [addSceneVideoClips, setAddSceneVideoClips] = useState<ClipRange[]>([]);
   const [addSceneBusy, setAddSceneBusy] = useState(false);
+  const [visualItemsDraft, setVisualItemsDraft] = useState<{sceneId: string; value: string} | null>(null);
+  const [visualPageItemsDraft, setVisualPageItemsDraft] = useState<{
+    sceneId: string;
+    pageIndex: number;
+    value: string;
+  } | null>(null);
   const jobSourceRef = useRef<EventSource | null>(null);
   const storyboardRef = useRef<Storyboard | null>(null);
   const clipVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -136,6 +153,10 @@ export function App() {
     if (typeof runVoice === 'string' && runVoice) {
       setTtsVoice(runVoice);
     }
+    const runVideoMode = run?.metadata.video_mode;
+    if (runVideoMode === 'short_30s' || runVideoMode === 'standard_60s' || runVideoMode === 'technical_90s') {
+      setVideoMode(runVideoMode);
+    }
     const runBrandMode = run?.metadata.brand_mode;
     if (runBrandMode === 'rs' || runBrandMode === 'rb') {
       setBrandMode(runBrandMode);
@@ -163,6 +184,19 @@ export function App() {
     () => (selectedScene ? visualItemsForScene(selectedScene) : []),
     [selectedScene],
   );
+  const selectedVisualPages = useMemo(
+    () => (selectedScene ? visualPagesForScene(selectedScene) : []),
+    [selectedScene],
+  );
+  const selectedVisibleTextPreview = useMemo(
+    () => (selectedScene ? visibleTextPreviewForScene(selectedScene, run?.visible_text_manifest) : []),
+    [selectedScene, run?.visible_text_manifest],
+  );
+
+  useEffect(() => {
+    setVisualItemsDraft(null);
+    setVisualPageItemsDraft(null);
+  }, [selectedSceneId, run?.run_id]);
 
   async function refreshProjects() {
     try {
@@ -375,6 +409,7 @@ export function App() {
     try {
       const job = await api.rerenderJob(run.project_id, run.run_id, {
         render_profile: renderProfile,
+        video_mode: videoMode,
         user_brief: cleanUserBrief(userBrief) || undefined,
         brand_mode: brandMode,
         bomb_circle: bombCircle,
@@ -433,6 +468,113 @@ export function App() {
       visual.bullets = items;
     }
     updateSelectedScene({visual});
+  }
+
+  function updateSelectedVisualPages(pages: VisualPage[]) {
+    if (!selectedScene) return;
+    updateSelectedScene({visual: {...selectedScene.visual, visual_pages: pages}});
+  }
+
+  function updateSelectedVisualPage(index: number, patch: Partial<VisualPage>) {
+    const pages = [...selectedVisualPages];
+    const current = pages[index];
+    if (!current) return;
+    pages[index] = {...current, ...patch};
+    updateSelectedVisualPages(pages);
+  }
+
+  function addVisualPage() {
+    if (!selectedScene) return;
+    const sourceItems = selectedVisualItems.length
+      ? selectedVisualItems
+      : ([selectedScene.visual.caption, selectedScene.visual.headline].filter(Boolean) as string[]);
+    const page: VisualPage = {
+      title: selectedScene.visual.headline || '新画面页',
+      caption: selectedScene.visual.caption ?? '',
+      items: sourceItems.slice(0, 3),
+    };
+    updateSelectedVisualPages([...selectedVisualPages, page]);
+  }
+
+  function syncFirstVisualPageFromScene() {
+    if (!selectedScene || !selectedVisualPages.length) return;
+    const pages = [...selectedVisualPages];
+    const sourceItems = selectedVisualItems.length
+      ? selectedVisualItems
+      : ([selectedScene.visual.caption, selectedScene.visual.headline].filter(Boolean) as string[]);
+    pages[0] = {
+      ...pages[0],
+      title: selectedScene.visual.headline || pages[0].title,
+      caption: selectedScene.visual.caption ?? pages[0].caption ?? '',
+      items: sourceItems.slice(0, 3),
+    };
+    updateSelectedVisualPages(pages);
+  }
+
+  function syncAllVisualPageCaptionsFromScene() {
+    if (!selectedScene || !selectedVisualPages.length) return;
+    const caption = selectedScene.visual.caption ?? '';
+    updateSelectedVisualPages(selectedVisualPages.map((page) => ({...page, caption})));
+  }
+
+  function deleteVisualPage(index: number) {
+    updateSelectedVisualPages(selectedVisualPages.filter((_, pageIndex) => pageIndex !== index));
+  }
+
+  function moveVisualPage(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= selectedVisualPages.length) return;
+    const pages = [...selectedVisualPages];
+    [pages[index], pages[target]] = [pages[target], pages[index]];
+    updateSelectedVisualPages(pages);
+  }
+
+  function selectedVisualItemsText(): string {
+    if (selectedScene && visualItemsDraft?.sceneId === selectedScene.id) {
+      return visualItemsDraft.value;
+    }
+    return selectedVisualItems.join('\n');
+  }
+
+  function beginVisualItemsEdit() {
+    if (!selectedScene) return;
+    setVisualItemsDraft({sceneId: selectedScene.id, value: selectedVisualItems.join('\n')});
+  }
+
+  function changeVisualItemsText(value: string) {
+    if (!selectedScene) return;
+    setVisualItemsDraft({sceneId: selectedScene.id, value});
+    updateSelectedVisualItems(textAreaLines(value));
+  }
+
+  function endVisualItemsEdit() {
+    setVisualItemsDraft(null);
+  }
+
+  function visualPageItemsText(pageIndex: number, page: VisualPage): string {
+    if (
+      selectedScene &&
+      visualPageItemsDraft?.sceneId === selectedScene.id &&
+      visualPageItemsDraft.pageIndex === pageIndex
+    ) {
+      return visualPageItemsDraft.value;
+    }
+    return (page.items ?? []).join('\n');
+  }
+
+  function beginVisualPageItemsEdit(pageIndex: number, page: VisualPage) {
+    if (!selectedScene) return;
+    setVisualPageItemsDraft({sceneId: selectedScene.id, pageIndex, value: (page.items ?? []).join('\n')});
+  }
+
+  function changeVisualPageItemsText(pageIndex: number, value: string) {
+    if (!selectedScene) return;
+    setVisualPageItemsDraft({sceneId: selectedScene.id, pageIndex, value});
+    updateSelectedVisualPage(pageIndex, {items: textAreaLines(value)});
+  }
+
+  function endVisualPageItemsEdit() {
+    setVisualPageItemsDraft(null);
   }
 
   async function addCustomScene() {
@@ -644,7 +786,7 @@ export function App() {
               rows={briefRows(userBrief)}
             />
             <span className="muted-copy">
-              生成新视频时会优先影响讲法和侧重点；选择历史 run 后生成新版，只会使用当前分镜编辑。
+              生成新视频时会优先影响讲法和侧重点；选择历史 run 后生成新版，会使用当前分镜编辑和左侧模式。
             </span>
             <div className="brief-chips" aria-label="快速添加侧重点">
               {['真实使用体验', '上手简单', '技术流程', '开源推广', '更适合短视频'].map((chip) => (
@@ -744,7 +886,7 @@ export function App() {
               project.runs.map((runId) => (
                 <button key={`${project.id}-${runId}`} onClick={() => loadRun(project.id, runId)}>
                   <span>{project.id}</span>
-                  <strong>{runId}</strong>
+                  <strong>{project.run_labels?.[runId] ?? runId}</strong>
                 </button>
               )),
             )}
@@ -884,18 +1026,102 @@ export function App() {
               <label>
                 {visualItemsLabel(selectedScene)}
                 <textarea
-                  value={selectedVisualItems.join('\n')}
-                  onChange={(event) =>
-                    updateSelectedVisualItems(
-                      event.target.value
-                        .split('\n')
-                        .map((line) => line.trim())
-                        .filter(Boolean),
-                    )
-                  }
+                  value={selectedVisualItemsText()}
+                  onFocus={beginVisualItemsEdit}
+                  onChange={(event) => changeVisualItemsText(event.target.value)}
+                  onBlur={endVisualItemsEdit}
                 />
                 <span className="muted-copy voice-hint">{visualItemsHint(selectedScene)}</span>
               </label>
+              <div className="visible-text-preview-box">
+                <div className="label-with-tip">
+                  <span>本幕实际显示文字</span>
+                  <InfoTip text="这里不包含底部字幕；底部字幕只来自旁白。" />
+                </div>
+                {selectedVisibleTextPreview.length ? (
+                  <div className="visible-text-list">
+                    {selectedVisibleTextPreview.map((entry, index) => (
+                      <div key={`${entry.source}-${entry.text}-${index}`} className="visible-text-row">
+                        <span>{entry.source}</span>
+                        <strong>{entry.text}</strong>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="muted-copy voice-hint">当前没有额外画面文字；只会显示模板安全占位和底部字幕。</p>
+                )}
+              </div>
+              <div className="visual-pages-editor">
+                <div className="label-with-tip">
+                  <span>视觉分页</span>
+                  <InfoTip text="长旁白会在同一幕内切换这些画面页；存在分页时，视频主要使用这里的标题、短句和条目。" />
+                </div>
+                {selectedVisualPages.length ? (
+                  <p className="muted-copy voice-hint">当前视频主要使用视觉分页文字；上方标题、短句和关键词作为兜底。</p>
+                ) : (
+                  <p className="muted-copy voice-hint">暂无分页。生成新版时后端会自动补分页，也可以先手动新增。</p>
+                )}
+                {selectedVisualPages.length ? (
+                  <div className="visual-page-sync-actions">
+                    <button type="button" onClick={syncFirstVisualPageFromScene}>
+                      同步第一页
+                    </button>
+                    <button type="button" onClick={syncAllVisualPageCaptionsFromScene}>
+                      同步全部短句
+                    </button>
+                  </div>
+                ) : null}
+                <div className="visual-page-list">
+                  {selectedVisualPages.map((page, index) => (
+                    <div key={`visual-page-${index}`} className="visual-page-card">
+                      <div className="visual-page-head">
+                        <strong>{String(index + 1).padStart(2, '0')}</strong>
+                        <div className="visual-page-actions">
+                          <button type="button" onClick={() => moveVisualPage(index, -1)} disabled={index === 0}>
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveVisualPage(index, 1)}
+                            disabled={index === selectedVisualPages.length - 1}
+                          >
+                            ↓
+                          </button>
+                          <button type="button" onClick={() => deleteVisualPage(index)}>
+                            删除
+                          </button>
+                        </div>
+                      </div>
+                      <label>
+                        页标题
+                        <input
+                          value={page.title}
+                          onChange={(event) => updateSelectedVisualPage(index, {title: event.target.value})}
+                        />
+                      </label>
+                      <label>
+                        页短句
+                        <input
+                          value={page.caption ?? ''}
+                          onChange={(event) => updateSelectedVisualPage(index, {caption: event.target.value})}
+                        />
+                      </label>
+                      <label>
+                        页条目
+                        <textarea
+                          value={visualPageItemsText(index, page)}
+                          onFocus={() => beginVisualPageItemsEdit(index, page)}
+                          onChange={(event) => changeVisualPageItemsText(index, event.target.value)}
+                          onBlur={endVisualPageItemsEdit}
+                        />
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" className="secondary-action" onClick={addVisualPage}>
+                  + 新增视觉页
+                </button>
+              </div>
               <label>
                 旁白
                 <textarea
@@ -1268,6 +1494,8 @@ function createCustomScene(options: {
       focus_target: 'none',
       media_type: options.kind === 'video' ? 'video' : options.kind === 'image' ? 'image' : 'none',
       animation: 'rise',
+      motion_asset: 'none',
+      motion_delay_ratio: 0.48,
     },
   };
 }
@@ -1396,9 +1624,10 @@ function describeRunState(run: RunDetail | null): {message: string; shortLabel: 
       detail: '生成后会显示手机视频预览',
     };
   }
+  const label = runDisplayLabel(run);
   if (run.files.video) {
     return {
-      message: `Run ${run.run_id} rendered`,
+      message: `Run ${label} rendered`,
       shortLabel: 'MP4',
       detail: '视频已生成，可以在手机预览区播放',
     };
@@ -1407,16 +1636,30 @@ function describeRunState(run: RunDetail | null): {message: string; shortLabel: 
   const reason = String(run.metadata.next_step_requires ?? '');
   if (nextStep || reason) {
     return {
-      message: `Run ${run.run_id} stopped at ${nextStep || 'workflow'}`,
+      message: `Run ${label} stopped at ${nextStep || 'workflow'}`,
       shortLabel: nextStep || 'STOP',
       detail: reason || '当前 run 还没有生成 video.mp4',
     };
   }
   return {
-    message: `Run ${run.run_id} has no video yet`,
+    message: `Run ${label} has no video yet`,
     shortLabel: 'NO MP4',
     detail: '当前 run 还没有生成 video.mp4',
   };
+}
+
+function runDisplayLabel(run: RunDetail): string {
+  if (run.run_label) return run.run_label;
+  if (run.run_id.includes('+')) return run.run_id;
+  const suffix = videoModeSuffix(run.metadata.video_mode);
+  return suffix ? `${run.run_id}+${suffix}` : run.run_id;
+}
+
+function videoModeSuffix(videoMode: unknown): string | null {
+  if (videoMode === 'short_30s') return '30s';
+  if (videoMode === 'standard_60s') return '60s';
+  if (videoMode === 'technical_90s') return '90s';
+  return null;
 }
 
 function idleProgress(): ProgressState {
@@ -1535,6 +1778,87 @@ function visualItemsForScene(scene: Scene): string[] {
   if (bullets.length) return bullets;
   if (diagramNodes.length) return diagramNodes;
   return [];
+}
+
+function visualPagesForScene(scene: Scene): VisualPage[] {
+  return (scene.visual.visual_pages ?? [])
+    .map((page) => ({
+      title: String(page.title ?? ''),
+      caption: page.caption ?? '',
+      items: Array.isArray(page.items) ? page.items.map((item) => String(item)).filter(Boolean) : [],
+    }))
+    .filter((page) => page.title.trim() || page.caption?.trim() || page.items.length);
+}
+
+function visibleTextPreviewForScene(
+  scene: Scene,
+  manifest?: RunDetail['visible_text_manifest'] | null,
+): Array<{source: string; text: string}> {
+  const manifestScene = manifest?.scenes?.find((item) => item.scene_id === scene.id);
+  if (manifestScene) {
+    return manifestScene.entries
+      .filter((entry) => entry.text?.trim() && !entry.allowed_from_narration)
+      .map((entry) => ({source: visibleTextSourceLabel(entry.source), text: entry.text.trim()}));
+  }
+
+  const pages = visualPagesForScene(scene);
+  const entries: Array<{source: string; text: string}> = [];
+  const add = (source: string, text: unknown) => {
+    const value = String(text ?? '').trim();
+    if (!value) return;
+    entries.push({source, text: value});
+  };
+
+  if (pages.length) {
+    pages.forEach((page, pageIndex) => {
+      const label = `视觉页 ${String(pageIndex + 1).padStart(2, '0')}`;
+      add(`${label} 标题`, page.title);
+      add(`${label} 短句`, page.caption);
+      page.items.forEach((item, itemIndex) => add(`${label} 条目 ${itemIndex + 1}`, item));
+    });
+  } else {
+    add('标题', scene.visual.headline);
+    add('画面短句', scene.visual.caption);
+    visualItemsForScene(scene).forEach((item, index) => add(`${visualItemsLabel(scene)} ${index + 1}`, item));
+    add('代码/结果', scene.visual.code);
+  }
+
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    const key = `${entry.source}:${entry.text}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function visibleTextSourceLabel(source: string): string {
+  const pageMatch = source.match(/^visual\.visual_pages\[(\d+)]\.(title|caption|items\[(\d+)])$/);
+  if (pageMatch) {
+    const page = `视觉页 ${String(Number(pageMatch[1]) + 1).padStart(2, '0')}`;
+    if (pageMatch[2] === 'title') return `${page} 标题`;
+    if (pageMatch[2] === 'caption') return `${page} 短句`;
+    return `${page} 条目 ${Number(pageMatch[3]) + 1}`;
+  }
+  const beatMatch = source.match(/^visual\.micro_beats\[(\d+)]\.(text|emphasis)$/);
+  if (beatMatch) {
+    return beatMatch[2] === 'emphasis' ? `画面标签 ${Number(beatMatch[1]) + 1} 补充` : `画面标签 ${Number(beatMatch[1]) + 1}`;
+  }
+  const bulletMatch = source.match(/^visual\.bullets\[(\d+)]$/);
+  if (bulletMatch) return `画面关键词 ${Number(bulletMatch[1]) + 1}`;
+  const nodeMatch = source.match(/^visual\.diagram_nodes\[(\d+)]$/);
+  if (nodeMatch) return `流程节点 ${Number(nodeMatch[1]) + 1}`;
+  if (source === 'visual.headline') return '标题';
+  if (source === 'visual.caption') return '画面短句';
+  if (source === 'visual.code') return '代码/结果';
+  return source.replace(/^visual\./, '');
+}
+
+function textAreaLines(value: string): string[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 function visualItemsLabel(scene: Scene): string {

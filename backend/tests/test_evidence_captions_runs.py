@@ -153,6 +153,17 @@ def test_versioned_runs_resolve_latest_run(tmp_path: Path) -> None:
     assert video.exists()
 
 
+def test_versioned_runs_support_mode_suffixes(tmp_path: Path) -> None:
+    first = allocate_run(tmp_path, label_suffix="30s")
+    second = allocate_run(tmp_path, label_suffix="90s")
+
+    assert first.run_id == "0001+30s"
+    assert second.run_id == "0002+90s"
+    assert list_run_ids(tmp_path) == ["0001+30s", "0002+90s"]
+    assert resolve_run_dir(tmp_path, "0001") == first.run_dir
+    assert resolve_run_dir(tmp_path, "latest") == second.run_dir
+
+
 def test_demo_report_is_written_without_video(tmp_path: Path) -> None:
     settings = Settings(ffmpeg_exe=tmp_path / "missing-ffmpeg.exe")
 

@@ -1,18 +1,18 @@
 import React from 'react';
-import {Easing, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+import {Easing, interpolate} from 'remotion';
 import {theme} from '../styles/theme';
 import type {Scene} from '../types';
-import {accentOf, beatTiming, getBeats, HighlightText, SceneShell} from './sceneKit';
+import {getBeats, HighlightText, itemsForScenePage, SceneShell, timingForMotion, useSceneMotion} from './sceneKit';
 
 export const FlowScene: React.FC<{scene: Scene}> = ({scene}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const accent = accentOf(scene);
-  const beats = getBeats(scene, 5);
-  const nodes = (scene.visual.diagram_nodes.length ? scene.visual.diagram_nodes : beats.map((beat) => beat.text)).slice(0, 5);
+  const motion = useSceneMotion(scene);
+  const {accent, timingFrame, timingDuration, fps} = motion;
+  const fallbackBeats = getBeats(scene, 5);
+  const fallbackNodes = scene.visual.diagram_nodes.length ? scene.visual.diagram_nodes : fallbackBeats.map((beat) => beat.text);
+  const nodes = itemsForScenePage(scene, motion, fallbackNodes, 5);
 
   return (
-    <SceneShell scene={scene} dense>
+    <SceneShell scene={scene} dense motion={motion}>
       <div style={{display: 'grid', gap: 16}}>
         <div
           style={{
@@ -31,10 +31,10 @@ export const FlowScene: React.FC<{scene: Scene}> = ({scene}) => {
         <div style={{display: 'grid', gap: 12}}>
           {nodes.map((rawNode, index) => {
             const node = parseNode(rawNode);
-            const timing = beatTiming(frame, fps, scene.duration, index * 0.13);
+            const timing = timingForMotion(motion, index * 0.13);
             const active = interpolate(
-              frame,
-              [Math.round((index * 0.13 + 0.04) * scene.duration * fps), Math.round((index * 0.13 + 0.16) * scene.duration * fps)],
+              timingFrame,
+              [Math.round((index * 0.13 + 0.04) * timingDuration * fps), Math.round((index * 0.13 + 0.16) * timingDuration * fps)],
               [0, 1],
               {easing: Easing.bezier(0.16, 1, 0.3, 1), extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
             );

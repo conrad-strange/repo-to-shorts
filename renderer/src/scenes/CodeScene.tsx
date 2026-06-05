@@ -1,25 +1,25 @@
 import React from 'react';
-import {interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+import {interpolate} from 'remotion';
 import type {Scene} from '../types';
-import {accentOf, BeatLine, getBeats, SceneShell} from './sceneKit';
+import {BeatLine, beatsForScenePage, getBeats, SceneShell, useSceneMotion} from './sceneKit';
 
 export const CodeScene: React.FC<{scene: Scene}> = ({scene}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const accent = accentOf(scene);
+  const motion = useSceneMotion(scene);
+  const {accent, timingFrame, timingDuration} = motion;
   const beats = getBeats(scene, 3);
+  const pageBeats = beatsForScenePage(scene, motion, 3);
   const code = scene.visual.code || beats.find((beat) => beat.kind === 'code')?.text || 'python app.py';
-  const terminalOpacity = interpolate(frame, [4, 14], [0, 1], {
+  const terminalOpacity = interpolate(timingFrame, [4, 14], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
-  const cursorOpacity = interpolate(frame % 28, [0, 14, 28], [1, 0.2, 1], {
+  const cursorOpacity = interpolate(timingFrame % 28, [0, 14, 28], [1, 0.2, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
 
   return (
-    <SceneShell scene={scene} dense>
+    <SceneShell scene={scene} dense motion={motion}>
       <div
         style={{
           borderRadius: 8,
@@ -51,8 +51,16 @@ export const CodeScene: React.FC<{scene: Scene}> = ({scene}) => {
         </pre>
       </div>
       <div style={{display: 'grid', gap: 24, marginTop: 42}}>
-        {beats.slice(0, 2).map((beat, index) => (
-          <BeatLine key={`${beat.text}-${index}`} beat={beat} index={index} scene={scene} accent={accent} />
+        {pageBeats.slice(0, 2).map((beat, index) => (
+          <BeatLine
+            key={`${beat.text}-${index}`}
+            beat={beat}
+            index={index}
+            scene={scene}
+            accent={accent}
+            frameOverride={timingFrame}
+            durationOverride={timingDuration}
+          />
         ))}
       </div>
     </SceneShell>

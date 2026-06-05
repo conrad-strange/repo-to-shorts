@@ -7,10 +7,12 @@
     "render": "remotion render src/RemotionRoot.tsx VerticalProjectVideo ../outputs/demo/video.mp4"
   },
   "dependencies": {
-    "@remotion/cli": "^4.0.0",
-    "remotion": "^4.0.0",
+    "@remotion/cli": "4.0.469",
+    "@remotion/lottie": "4.0.469",
+    "lottie-web": "5.13.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "remotion": "4.0.469"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",

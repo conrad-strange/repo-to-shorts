@@ -1,23 +1,22 @@
 import React from 'react';
-import {interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
+import {interpolate} from 'remotion';
 import {theme} from '../styles/theme';
 import type {Scene} from '../types';
-import {accentOf, beatTiming, getBeats, HighlightText, SceneShell} from './sceneKit';
+import {beatsForScenePage, HighlightText, SceneShell, timingForMotion, useSceneMotion} from './sceneKit';
 
 export const FeatureSpotlightScene: React.FC<{scene: Scene}> = ({scene}) => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const accent = accentOf(scene);
-  const beats = getBeats(scene, 3);
-  const sweep = interpolate(frame, [0, scene.duration * fps], [-260, 760], {
+  const motion = useSceneMotion(scene);
+  const beats = beatsForScenePage(scene, motion, 3);
+  const {accent, timingFrame, timingDuration, fps} = motion;
+  const sweep = interpolate(timingFrame, [0, timingDuration * fps], [-260, 760], {
     extrapolateRight: 'clamp',
   });
 
   return (
-    <SceneShell scene={scene}>
+    <SceneShell scene={scene} motion={motion}>
       <div style={{display: 'grid', gap: 20}}>
         {beats.map((beat, index) => {
-          const timing = beatTiming(frame, fps, scene.duration, beat.start_ratio ?? index * 0.2);
+          const timing = timingForMotion(motion, beat.start_ratio ?? index * 0.2);
           return (
             <div
               key={`${beat.text}-${index}`}
