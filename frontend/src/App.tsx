@@ -1033,24 +1033,6 @@ export function App() {
                 />
                 <span className="muted-copy voice-hint">{visualItemsHint(selectedScene)}</span>
               </label>
-              <div className="visible-text-preview-box">
-                <div className="label-with-tip">
-                  <span>本幕实际显示文字</span>
-                  <InfoTip text="这里不包含底部字幕；底部字幕只来自旁白。" />
-                </div>
-                {selectedVisibleTextPreview.length ? (
-                  <div className="visible-text-list">
-                    {selectedVisibleTextPreview.map((entry, index) => (
-                      <div key={`${entry.source}-${entry.text}-${index}`} className="visible-text-row">
-                        <span>{entry.source}</span>
-                        <strong>{entry.text}</strong>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="muted-copy voice-hint">当前没有额外画面文字；只会显示模板安全占位和底部字幕。</p>
-                )}
-              </div>
               <div className="visual-pages-editor">
                 <div className="label-with-tip">
                   <span>视觉分页</span>
@@ -1318,6 +1300,33 @@ export function App() {
             <p className="muted-copy">选择一个 scene 开始编辑。</p>
           )}
         </section>
+
+        {selectedScene ? (
+          <details className="panel visible-text-preview-box visible-text-dropdown">
+            <summary>
+              <span className="visible-text-summary-title">
+                <span className="visible-text-chevron">›</span>
+                本幕实际显示文字
+              </span>
+              <span className="visible-text-summary-meta">{selectedVisibleTextPreview.length} 条</span>
+            </summary>
+            <div className="visible-text-dropdown-body">
+              <p className="muted-copy voice-hint">这里不包含底部字幕；底部字幕只来自旁白。</p>
+              {selectedVisibleTextPreview.length ? (
+                <div className="visible-text-list">
+                  {selectedVisibleTextPreview.map((entry, index) => (
+                    <div key={`${entry.source}-${entry.text}-${index}`} className="visible-text-row">
+                      <span>{entry.source}</span>
+                      <strong>{entry.text}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted-copy voice-hint">当前没有额外画面文字；只会显示模板安全占位和底部字幕。</p>
+              )}
+            </div>
+          </details>
+        ) : null}
 
         <section className="panel">
           <div className="section-title">TTS / 校验</div>

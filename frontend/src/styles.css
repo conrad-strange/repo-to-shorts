@@ -615,6 +615,71 @@ label {
   padding: 10px;
 }
 
+.visible-text-dropdown {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.visible-text-dropdown summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  color: #f0f6fc;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  list-style: none;
+  user-select: none;
+}
+
+.visible-text-dropdown summary::-webkit-details-marker {
+  display: none;
+}
+
+.visible-text-summary-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.visible-text-chevron {
+  color: #58a6ff;
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 180ms ease;
+}
+
+.visible-text-dropdown[open] .visible-text-chevron {
+  transform: rotate(90deg);
+}
+
+.theme-bomb .visible-text-chevron {
+  color: #ffb86c;
+}
+
+.visible-text-summary-meta {
+  flex: 0 0 auto;
+  border: 1px solid rgba(240, 246, 252, 0.1);
+  border-radius: 999px;
+  background: rgba(13, 17, 23, 0.72);
+  color: #8b949e;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+}
+
+.visible-text-dropdown-body {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid rgba(240, 246, 252, 0.08);
+  padding: 10px;
+}
+
 .visible-text-list {
   display: grid;
   gap: 6px;
