@@ -28,6 +28,7 @@
 - micro_beat text 控制在 4-14 个中文字符左右；英文技术名可以稍长。
 - 这些字段都会直接显示在视频里，不能写导演指令、镜头语言或动画描述。
 - 禁止把“文字弹出”“镜头聚焦”“克隆仓库动画”“文件列表展示”“技术标签展示”“第一步高亮”等词放进可见文字。
+- 可见文字不要写完整外链，不要出现 `https://` 或 `github.com/owner/repo`；仓库身份只写 `owner/repo`。
 - 完整解释交给 narration 和底部字幕。
 - 画面文字不要重复 narration 的完整句子。
 - 代码片段必须真实、短、手机可读，不要编造命令。
@@ -39,7 +40,7 @@
 3. architecture_map / flow：核心流程，表现输入输出关系。
 4. feature_spotlight / stack：可信亮点或技术栈。
 5. steps / evidence_grid：使用方式或证据摘要。
-6. cta：GitHub repo 地址 + 查看代码 / 欢迎 Star。
+6. cta：GitHub repo handle（owner/repo）+ 查看代码 / 欢迎 Star。
 
 ## 流程页要求
 

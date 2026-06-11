@@ -2,14 +2,15 @@ import React from 'react';
 import {AbsoluteFill, Easing, interpolate, spring, useCurrentFrame, useVideoConfig} from 'remotion';
 import {theme} from '../styles/theme';
 import type {Scene} from '../types';
+import {GitHubIcon} from './GitHubIcon';
+import {repoHandleFromScene} from './repoIdentity';
 import {accentOf} from './sceneKit';
 
 export const CtaScene: React.FC<{scene: Scene}> = ({scene}) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const accent = accentOf(scene);
-  const repoHandle = compactRepoHandle(scene.visual.repo_display_url || scene.visual.headline);
-  const repoUrl = fullRepoUrl(scene.visual.repo_url || scene.visual.repo_display_url || repoHandle);
+  const repoHandle = repoHandleFromScene(scene, 'owner/repo');
   const enter = spring({frame: frame - 4, fps, config: {damping: 20, stiffness: 86}});
   const starScale = interpolate(
     frame,
@@ -57,7 +58,7 @@ export const CtaScene: React.FC<{scene: Scene}> = ({scene}) => {
         >
           <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20}}>
             <div style={{display: 'flex', alignItems: 'center', gap: 14, color: theme.muted, fontSize: 24}}>
-              <RepoMark accent={accent} />
+              <GitHubIcon accent={accent} size={32} />
               Open Source
             </div>
             <StarButton starScale={starScale} starLight={starLight} shineX={shineX} accent={accent} />
@@ -85,26 +86,11 @@ export const CtaScene: React.FC<{scene: Scene}> = ({scene}) => {
             <Action label="欢迎 Star" accent={accent} />
           </div>
 
-          <RepoLinkCard repoUrl={repoUrl} accent={accent} />
+          <RepoLinkCard repoHandle={repoHandle} accent={accent} />
         </div>
       </div>
     </AbsoluteFill>
   );
-};
-
-const compactRepoHandle = (value?: string | null) =>
-  (value || '')
-    .replace(/^https?:\/\/github\.com\//i, '')
-    .replace(/^github\.com\//i, '')
-    .replace(/\.git$/i, '')
-    .trim() || 'owner/repo';
-
-const fullRepoUrl = (value?: string | null) => {
-  const cleaned = (value || '').replace(/^https?:\/\//i, '').replace(/\.git$/i, '').trim();
-  if (!cleaned) {
-    return 'github.com/owner/repo';
-  }
-  return cleaned.startsWith('github.com/') ? cleaned : `github.com/${compactRepoHandle(cleaned)}`;
 };
 
 const StarButton: React.FC<{starScale: number; starLight: number; shineX: number; accent: string}> = ({
@@ -153,7 +139,7 @@ const StarButton: React.FC<{starScale: number; starLight: number; shineX: number
   );
 };
 
-const RepoLinkCard: React.FC<{repoUrl: string; accent: string}> = ({repoUrl, accent}) => (
+const RepoLinkCard: React.FC<{repoHandle: string; accent: string}> = ({repoHandle, accent}) => (
   <div
     style={{
       marginTop: 34,
@@ -168,19 +154,22 @@ const RepoLinkCard: React.FC<{repoUrl: string; accent: string}> = ({repoUrl, acc
       padding: '0 24px',
     }}
   >
-    <div style={{minWidth: 0}}>
-      <div style={{color: theme.muted, fontSize: 20, marginBottom: 8}}>GitHub repository</div>
-      <div
-        style={{
-          color: theme.foreground,
-          fontSize: 25,
-          fontFamily: 'SFMono-Regular, Consolas, monospace',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        {repoUrl}
+    <div style={{display: 'flex', alignItems: 'center', gap: 14, minWidth: 0}}>
+      <GitHubIcon accent={accent} size={34} opacity={0.9} />
+      <div style={{minWidth: 0}}>
+        <div style={{color: theme.muted, fontSize: 20, marginBottom: 8}}>Repository handle</div>
+        <div
+          style={{
+            color: theme.foreground,
+            fontSize: 25,
+            fontFamily: 'SFMono-Regular, Consolas, monospace',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {repoHandle}
+        </div>
       </div>
     </div>
     <div
@@ -197,7 +186,7 @@ const RepoLinkCard: React.FC<{repoUrl: string; accent: string}> = ({repoUrl, acc
         fontWeight: 720,
       }}
     >
-      打开项目
+      GitHub 搜索
     </div>
   </div>
 );
@@ -218,13 +207,6 @@ const Action: React.FC<{label: string; accent: string; active?: boolean}> = ({la
     }}
   >
     {label}
-  </div>
-);
-
-const RepoMark: React.FC<{accent: string}> = ({accent}) => (
-  <div style={{width: 32, height: 32, borderRadius: 8, border: `2px solid ${accent}`, position: 'relative'}}>
-    <span style={{position: 'absolute', left: 8, top: 8, width: 7, height: 7, borderRadius: 999, background: accent}} />
-    <span style={{position: 'absolute', left: 8, bottom: 8, width: 14, height: 2, background: accent}} />
   </div>
 );
 

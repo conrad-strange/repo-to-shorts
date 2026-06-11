@@ -18,6 +18,8 @@ export type MicroBeatKind = 'text' | 'metric' | 'code' | 'flow' | 'warning' | 'c
 export type VisualAssetType = 'github_repo_home' | 'readme_focus' | 'none';
 export type VisualFocusTarget = 'repo_name' | 'readme_title' | 'install_command' | 'readme_section' | 'none';
 export type MotionAsset = 'data_flow' | 'code_scan' | 'evidence_pulse' | 'repo_pulse' | 'spark_burst' | 'none';
+export type MotionAssetKind = 'svg' | 'lottie' | 'none';
+export type MotionRole = 'accent' | 'side_illustration' | 'hero_background';
 
 export interface MicroBeat {
   text: string;
@@ -51,6 +53,9 @@ export interface VisualSpec {
   media_type?: 'image' | 'video' | 'none';
   evidence_refs?: string[];
   motion_asset?: MotionAsset;
+  motion_asset_kind?: MotionAssetKind;
+  motion_asset_path?: string | null;
+  motion_role?: MotionRole;
   motion_delay_ratio?: number;
   visual_pages?: VisualPage[];
 }

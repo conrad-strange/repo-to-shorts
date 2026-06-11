@@ -6,7 +6,7 @@ from openai import BadRequestError
 from gva.config import Settings
 from gva.core.json_utils import loads_json_object
 from gva.core.llm_client import build_openai_client, get_generation_model
-from gva.core.visible_text import clean_visible_text, clean_visible_text_list
+from gva.core.visible_text import clean_visible_text, clean_visible_text_list, compact_github_repo_handle
 from gva.models.script import VideoScript
 from gva.models.storyboard import Storyboard
 
@@ -121,11 +121,18 @@ def sanitize_storyboard_payload(payload: dict) -> dict:
         visual["asset_path"] = _optional_string(_first_present(visual, "asset_path", "assetPath"))
         visual["focus_target"] = _focus_target_from_value(_first_present(visual, "focus_target", "focusTarget"))
         visual["repo_url"] = _optional_string(_first_present(visual, "repo_url", "repoUrl"))
-        visual["repo_display_url"] = _optional_string(_first_present(visual, "repo_display_url", "repoDisplayUrl"))
+        visual["repo_display_url"] = _optional_repo_display(_first_present(visual, "repo_display_url", "repoDisplayUrl"))
         visual["evidence_refs"] = _string_list(_first_present(visual, "evidence_refs", "evidenceRefs"))
         visual["motion_asset"] = _motion_asset_from_value(
             _first_present(visual, "motion_asset", "motionAsset", "lottie_asset", "lottieAsset")
         )
+        visual["motion_asset_kind"] = _motion_asset_kind_from_value(
+            _first_present(visual, "motion_asset_kind", "motionAssetKind")
+        )
+        visual["motion_asset_path"] = _optional_string(
+            _first_present(visual, "motion_asset_path", "motionAssetPath", "lottie_path", "lottiePath")
+        )
+        visual["motion_role"] = _motion_role_from_value(_first_present(visual, "motion_role", "motionRole"))
         visual["motion_delay_ratio"] = _safe_ratio(
             _first_present(visual, "motion_delay_ratio", "motionDelayRatio"),
             0.54,
@@ -207,6 +214,13 @@ def _clean_visible_string(value: object, fallback: str = "", limit: int | None =
 def _optional_string(value: object) -> str | None:
     cleaned = _clean_string(value, fallback="")
     return cleaned or None
+
+
+def _optional_repo_display(value: object) -> str | None:
+    cleaned = _optional_string(value)
+    if not cleaned:
+        return None
+    return compact_github_repo_handle(cleaned) or cleaned
 
 
 def _optional_visible_string(value: object, limit: int | None = None) -> str | None:
@@ -479,6 +493,27 @@ def _motion_asset_from_value(value: object) -> str:
     normalized = aliases.get(normalized, normalized)
     allowed = {"data_flow", "code_scan", "evidence_pulse", "repo_pulse", "spark_burst", "none"}
     return normalized if normalized in allowed else "none"
+
+
+def _motion_asset_kind_from_value(value: object) -> str:
+    if not isinstance(value, str):
+        return "none"
+    normalized = value.strip().lower()
+    return normalized if normalized in {"svg", "lottie", "none"} else "none"
+
+
+def _motion_role_from_value(value: object) -> str:
+    if not isinstance(value, str):
+        return "accent"
+    normalized = value.strip().lower().replace("-", "_")
+    aliases = {
+        "side": "side_illustration",
+        "illustration": "side_illustration",
+        "background": "hero_background",
+        "hero": "hero_background",
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in {"accent", "side_illustration", "hero_background"} else "accent"
 
 
 def _mode_notes(video_mode: str) -> str:

@@ -2,6 +2,7 @@ import React from 'react';
 import {interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import {theme} from '../styles/theme';
 import type {CaptionCue, Scene} from '../types';
+import {compactGithubLinks} from './repoIdentity';
 
 export const SubtitleOverlay: React.FC<{scene: Scene}> = ({scene}) => {
   const frame = useCurrentFrame();
@@ -67,11 +68,12 @@ const activeCue = (cues: CaptionCue[], time: number): CaptionCue | null => {
 
 const CaptionText: React.FC<{cue: CaptionCue}> = ({cue}) => {
   const keywords = cue.keywords || [];
+  const text = compactGithubLinks(cue.text);
   if (!keywords.length) {
-    return <>{cue.text}</>;
+    return <>{text}</>;
   }
   const pattern = new RegExp(`(${keywords.map(escapeRegExp).join('|')})`, 'gi');
-  const parts = cue.text.split(pattern).filter(Boolean);
+  const parts = text.split(pattern).filter(Boolean);
   return (
     <>
       {parts.map((part, index) =>

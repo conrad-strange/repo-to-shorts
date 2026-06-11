@@ -24,6 +24,8 @@ MicroBeatKind = Literal["text", "metric", "code", "flow", "warning", "cta"]
 VisualAssetType = Literal["github_repo_home", "readme_focus", "none"]
 VisualFocusTarget = Literal["repo_name", "readme_title", "install_command", "readme_section", "none"]
 MotionAsset = Literal["data_flow", "code_scan", "evidence_pulse", "repo_pulse", "spark_burst", "none"]
+MotionAssetKind = Literal["svg", "lottie", "none"]
+MotionRole = Literal["accent", "side_illustration", "hero_background"]
 
 
 class MicroBeat(BaseModel):
@@ -66,6 +68,9 @@ class VisualSpec(BaseModel):
     media_type: Literal["image", "video", "none"] = "none"
     evidence_refs: list[str] = Field(default_factory=list)
     motion_asset: MotionAsset = "none"
+    motion_asset_kind: MotionAssetKind = "none"
+    motion_asset_path: str | None = None
+    motion_role: MotionRole = "accent"
     motion_delay_ratio: float = Field(default=0.54, ge=0.0, le=0.9)
     visual_pages: list[VisualPage] = Field(default_factory=list)
 

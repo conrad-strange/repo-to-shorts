@@ -88,6 +88,41 @@ def test_visible_policy_fails_when_code_reuses_narration() -> None:
         apply_visible_text_policy(storyboard)
 
 
+def test_visible_policy_compacts_github_urls_to_repo_handle() -> None:
+    storyboard = Storyboard(
+        title="Demo",
+        scenes=[
+            Scene(
+                id="scene-001",
+                type="github_hero",
+                start=0,
+                duration=5,
+                narration="项目地址看仓库名即可。",
+                visual=VisualSpec(
+                    layout="github_hero",
+                    headline="https://github.com/conrad-strange/repo-to-shorts",
+                    caption="github.com/conrad-strange/repo-to-shorts",
+                    bullets=["查看 https://github.com/conrad-strange/repo-to-shorts/tree/main"],
+                    visual_pages=[
+                        VisualPage(
+                            title="https://github.com/conrad-strange/repo-to-shorts.git",
+                            caption="GitHub 仓库",
+                            items=["github.com/conrad-strange/repo-to-shorts"],
+                        )
+                    ],
+                ),
+            )
+        ],
+    )
+
+    apply_visible_text_policy(storyboard)
+
+    visible = json.dumps(storyboard.model_dump(mode="json"), ensure_ascii=False)
+    assert "https://github.com" not in visible
+    assert "github.com/conrad-strange" not in visible
+    assert "conrad-strange/repo-to-shorts" in visible
+
+
 def test_render_bridge_writes_visible_text_manifest_and_clean_storyboard(tmp_path: Path) -> None:
     renderer_dir = tmp_path / "renderer"
     audio_path = tmp_path / "voice.mp3"

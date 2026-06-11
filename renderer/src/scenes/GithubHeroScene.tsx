@@ -2,14 +2,15 @@ import React from 'react';
 import {AbsoluteFill, Easing, interpolate, spring, staticFile} from 'remotion';
 import {theme} from '../styles/theme';
 import type {Scene} from '../types';
+import {GitHubIcon} from './GitHubIcon';
+import {repoHandleFromScene} from './repoIdentity';
 import {beatsForScenePage, HighlightText, normalizeCopy, useSceneMotion, visualPageTransition} from './sceneKit';
 
 export const GithubHeroScene: React.FC<{scene: Scene}> = ({scene}) => {
   const motion = useSceneMotion(scene);
   const {frame, fps, accent, pageState, timingFrame: pageFrame} = motion;
   const asset = scene.visual.asset_path;
-  const repoUrl = scene.visual.repo_display_url || scene.visual.repo_url || 'github.com/repository';
-  const repoHandle = compactRepoHandle(repoUrl);
+  const repoHandle = repoHandleFromScene(scene, 'owner/repo');
   const headline = normalizeCopy(pageState?.page.title || '') || normalizeCopy(scene.visual.headline) || repoHandle;
   const caption = normalizeCopy(pageState?.page.caption || '') || normalizeCopy(scene.visual.caption || '') || '快速看懂项目价值';
   const beats = beatsForScenePage(scene, motion, 3);
@@ -67,7 +68,7 @@ export const GithubHeroScene: React.FC<{scene: Scene}> = ({scene}) => {
           }}
         >
           <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
-            <RepoGlyph accent={accent} />
+            <GitHubIcon accent={accent} size={34} />
             <span>GitHub 项目讲解</span>
           </div>
           <span>9:16 Repo Story</span>
@@ -109,7 +110,10 @@ export const GithubHeroScene: React.FC<{scene: Scene}> = ({scene}) => {
       >
         <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20}}>
           <div style={{fontSize: 24, color: theme.muted}}>Repository</div>
-          <div style={{fontSize: 20, color: theme.muted}}>{repoUrl}</div>
+          <div style={{display: 'flex', alignItems: 'center', gap: 8, color: theme.muted, fontSize: 20}}>
+            <GitHubIcon accent={theme.muted} size={20} opacity={0.86} />
+            {repoHandle}
+          </div>
         </div>
         <div
           style={{
@@ -172,13 +176,6 @@ const fallbackBeats = (scene: Scene) =>
     text,
   }));
 
-const compactRepoHandle = (value?: string | null) =>
-  (value || '')
-    .replace(/^https?:\/\/github\.com\//i, '')
-    .replace(/^github\.com\//i, '')
-    .replace(/\.git$/i, '')
-    .trim() || 'owner/repo';
-
 const heroHeadlineSize = (text: string) => {
   const length = Array.from(text || '').length;
   if (length > 22) return 68;
@@ -208,21 +205,6 @@ const SignalChip: React.FC<{label: string; accent: string; active?: boolean}> = 
   >
     <span style={{width: 8, height: 8, borderRadius: 999, background: active ? accent : theme.muted}} />
     {label}
-  </div>
-);
-
-const RepoGlyph: React.FC<{accent: string}> = ({accent}) => (
-  <div
-    style={{
-      width: 34,
-      height: 34,
-      borderRadius: 8,
-      border: `2px solid ${accent}`,
-      position: 'relative',
-    }}
-  >
-    <span style={{position: 'absolute', left: 8, top: 8, width: 8, height: 8, borderRadius: 999, background: accent}} />
-    <span style={{position: 'absolute', left: 8, bottom: 8, width: 14, height: 2, background: accent}} />
   </div>
 );
 

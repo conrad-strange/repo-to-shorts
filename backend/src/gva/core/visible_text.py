@@ -49,6 +49,11 @@ DIRECTION_TOKENS = (
     "表情",
 )
 
+GITHUB_REPO_URL_RE = re.compile(
+    r"(?:https?://)?github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\.git)?(?:[/?#][^\s，。！？!?；;、]*)?",
+    flags=re.IGNORECASE,
+)
+
 TECH_PHRASE_RULES: tuple[tuple[str, str], ...] = (
     (r"Repo\s*to\s*Shorts", "Repo to Shorts"),
     (r"输入[^，。；;!?！？]{0,8}(URL|url)", "输入 URL"),
@@ -105,7 +110,7 @@ SPOKEN_SENTENCE_MARKERS = (
 def clean_visible_text(value: object, limit: int | None = None) -> str | None:
     if value is None or isinstance(value, (dict, list)):
         return None
-    text = _normalize_terms(clean_text_value(value))
+    text = compact_github_repo_references(_normalize_terms(clean_text_value(value)))
     if not text:
         return None
 
@@ -152,6 +157,42 @@ def clean_text_value(text: object) -> str:
     return cleaned.strip(" -")
 
 
+def compact_github_repo_handle(value: object) -> str | None:
+    text = clean_text_value(value)
+    if not text:
+        return None
+    match = GITHUB_REPO_URL_RE.search(text)
+    if match:
+        candidate = match.group(0)
+    elif re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\.git)?", text):
+        candidate = text
+    else:
+        return None
+    candidate = re.sub(r"^https?://", "", candidate, flags=re.IGNORECASE)
+    candidate = re.sub(r"^github\.com/", "", candidate, flags=re.IGNORECASE)
+    parts = [part for part in re.split(r"[/?#]+", candidate.strip("/")) if part]
+    if len(parts) < 2:
+        return None
+    owner = parts[0]
+    repo = parts[1]
+    if repo.lower().endswith(".git"):
+        repo = repo[:-4]
+    if not owner or not repo:
+        return None
+    return f"{owner}/{repo}"
+
+
+def compact_github_repo_references(text: object) -> str:
+    value = clean_text_value(text)
+    if not value:
+        return ""
+
+    def replace(match: re.Match[str]) -> str:
+        return compact_github_repo_handle(match.group(0)) or match.group(0)
+
+    return GITHUB_REPO_URL_RE.sub(replace, value)
+
+
 def normalize_visible_key(text: object) -> str:
     return re.sub(r"[\W_]+", "", clean_text_value(text).lower(), flags=re.UNICODE)
 
@@ -190,7 +231,7 @@ def compact_visible_phrase(text: str | None) -> str | None:
 
 
 def compact_visible_phrases(text: str | None) -> list[str]:
-    value = clean_text_value(text)
+    value = compact_github_repo_references(text)
     if not value:
         return []
 

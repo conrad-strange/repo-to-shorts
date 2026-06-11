@@ -258,7 +258,7 @@ def test_sanitize_storyboard_payload_accepts_camel_case_scene_fields() -> None:
     assert scene.visual.bullets == ["README", "core files"]
     assert scene.visual.asset_type == "github_repo_home"
     assert scene.visual.focus_target == "repo_name"
-    assert scene.visual.repo_display_url == "github.com/conrad-strange/rag-demo"
+    assert scene.visual.repo_display_url == "conrad-strange/rag-demo"
 
 
 def test_sanitize_storyboard_payload_accepts_nested_storyboard() -> None:

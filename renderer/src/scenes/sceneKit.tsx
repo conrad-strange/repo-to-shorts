@@ -2,6 +2,7 @@ import React from 'react';
 import {AbsoluteFill, Easing, interpolate, useCurrentFrame, useVideoConfig} from 'remotion';
 import {resolveAccent, theme} from '../styles/theme';
 import type {MicroBeat, Scene, VisualPage} from '../types';
+import {compactGithubLinks} from './repoIdentity';
 
 export const layoutLabel: Record<string, string> = {
   hook: 'Hook',
@@ -394,7 +395,10 @@ export const HighlightText: React.FC<{text: string; accent: string}> = ({text, a
 };
 
 export const normalizeCopy = (value: string) => {
-  return String(value || '').replace(/READNE/gi, 'README').replace(/\s+/g, ' ').trim();
+  return compactGithubLinks(String(value || ''))
+    .replace(/READNE/gi, 'README')
+    .replace(/\s+/g, ' ')
+    .trim();
 };
 
 const normalizedVisualPages = (scene: Scene): VisualPage[] =>

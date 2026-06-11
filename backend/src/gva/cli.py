@@ -14,11 +14,14 @@ from rich.table import Table
 from gva.config import Settings
 from gva.agents.evaluator import evaluate_output
 from gva.core.llm_client import llm_settings_error, normalize_llm_provider, has_real_api_key
+from gva.core.motion_library import download_default_motion_assets, import_motion_asset, list_motion_assets
 from gva.core.render_bridge import find_browser, find_ffmpeg, find_node, find_npm
 from gva.core.runs import clean_old_runs, list_run_ids, resolve_run_dir
 from gva.workflow import run_render_workflow
 
 app = typer.Typer(help="Generate Chinese vertical explainer videos from code projects.")
+motion_app = typer.Typer(help="Manage local Lottie/SVG motion animation assets.")
+app.add_typer(motion_app, name="motion")
 console = Console()
 
 
@@ -154,6 +157,76 @@ def clean_command(
     console.print(f"Removed {len(removed)} run(s).")
     for path in removed:
         console.print(str(path))
+
+
+@motion_app.command("download")
+def motion_download_command(
+    force: bool = typer.Option(False, "--force", help="Overwrite cached assets instead of skipping same-name files."),
+    allow_network: bool = typer.Option(
+        True,
+        "--network/--no-network",
+        help="Try vetted remote catalog URLs when the default complex catalog contains approved assets.",
+    ),
+) -> None:
+    """Download curated free motion assets into the local cache."""
+    settings = Settings()
+    results = download_default_motion_assets(
+        settings=settings,
+        renderer_dir=settings.renderer_dir.resolve(),
+        force=force,
+        allow_network=allow_network,
+    )
+    _print_motion_results(results)
+
+
+@motion_app.command("import")
+def motion_import_command(
+    source: Path = typer.Argument(..., help="Local Lottie JSON or ZIP downloaded by the user."),
+    name: Optional[str] = typer.Option(None, "--name", help="Optional cache filename for a single JSON file."),
+    role: str = typer.Option("side_illustration", "--role", help="accent, side_illustration, or hero_background."),
+    tags: str = typer.Option("", "--tags", help="Comma-separated matching tags, such as code,data,readme."),
+    layouts: str = typer.Option("", "--layouts", help="Comma-separated scene layouts that should prefer this asset."),
+    source_url: Optional[str] = typer.Option(None, "--source-url", help="Optional original marketplace/source URL."),
+    license_name: str = typer.Option("user-provided", "--license", help="License note for the local asset."),
+) -> None:
+    """Import a user-downloaded Lottie JSON/ZIP into the local cache."""
+    settings = Settings()
+    results = import_motion_asset(
+        source=source,
+        settings=settings,
+        name=name,
+        role=role,
+        tags=[item.strip() for item in tags.split(",") if item.strip()],
+        layouts=[item.strip() for item in layouts.split(",") if item.strip()],
+        source_url=source_url,
+        license_name=license_name,
+    )
+    _print_motion_results(results)
+
+
+@motion_app.command("list")
+def motion_list_command() -> None:
+    """List locally cached motion assets."""
+    settings = Settings()
+    records = list_motion_assets(settings)
+    if not records:
+        console.print("[yellow]No local complex motion assets found. Import a vetted local JSON/ZIP with: gva motion import[/yellow]")
+        return
+    table = Table(title="Local Motion Assets")
+    table.add_column("ID", style="bold")
+    table.add_column("Kind")
+    table.add_column("Role")
+    table.add_column("Layouts")
+    table.add_column("File")
+    for record in records:
+        table.add_row(
+            str(record.get("id", "")),
+            str(record.get("kind", "")),
+            str(record.get("role", "")),
+            ", ".join(record.get("layouts") or []),
+            str(record.get("filename", "")),
+        )
+    console.print(table)
 
 
 @app.command("setup")
@@ -336,6 +409,29 @@ def _run_portable_tools_installer() -> None:
             "the downloaded zip is likely damaged. Delete .tools/downloads and rerun: gva setup --portable"
         )
         raise typer.Exit(exc.returncode)
+
+
+def _print_motion_results(results) -> None:
+    if not results:
+        console.print(
+            "[yellow]No default complex motion assets are bundled yet.[/yellow]\n"
+            "Use [bold]gva motion import[/bold] for user-downloaded Lottie JSON/ZIP files after checking license and visual fit."
+        )
+        return
+    table = Table(title="Motion Assets")
+    table.add_column("Asset", style="bold")
+    table.add_column("Status")
+    table.add_column("Detail")
+    for result in results:
+        status = {
+            "downloaded": "[green]Downloaded[/green]",
+            "copied": "[green]Copied[/green]",
+            "imported": "[green]Imported[/green]",
+            "skipped": "[yellow]Skipped[/yellow]",
+            "failed": "[red]Failed[/red]",
+        }.get(result.status, result.status)
+        table.add_row(result.filename, status, result.reason or result.path or "")
+    console.print(table)
 
 
 def _find_powershell_exe() -> Path | None:

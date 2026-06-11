@@ -44,10 +44,16 @@ def test_visual_spec_accepts_motion_fields() -> None:
         layout="architecture_map",
         headline="Workflow",
         motion_asset="data_flow",
+        motion_asset_kind="lottie",
+        motion_asset_path="generated/motion/data-flow.json",
+        motion_role="side_illustration",
         motion_delay_ratio=0.62,
     )
 
     assert visual.motion_asset == "data_flow"
+    assert visual.motion_asset_kind == "lottie"
+    assert visual.motion_asset_path == "generated/motion/data-flow.json"
+    assert visual.motion_role == "side_illustration"
     assert visual.motion_delay_ratio == 0.62
 
 

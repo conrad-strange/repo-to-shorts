@@ -11,9 +11,35 @@ from urllib.parse import urlparse
 
 from gva.config import Settings
 from gva.core.render_bridge import find_browser
-from gva.core.visible_text import clean_visible_text, clean_visible_text_list
+from gva.core.visible_text import clean_visible_text, clean_visible_text_list, compact_github_repo_handle
 from gva.models.repo import RepoSummary
 from gva.models.storyboard import MicroBeat, Scene, Storyboard
+
+
+MIN_GITHUB_SCREENSHOT_BYTES = 40_000
+LAYOUT_MOTION_ASSETS = {
+    "hook": "repo_pulse",
+    "github_hero": "repo_pulse",
+    "architecture_map": "data_flow",
+    "flow": "data_flow",
+    "code": "code_scan",
+    "readme_focus": "evidence_pulse",
+    "evidence_grid": "evidence_pulse",
+    "feature_spotlight": "evidence_pulse",
+    "stack": "data_flow",
+    "steps": "data_flow",
+    "title": "evidence_pulse",
+    "text": "evidence_pulse",
+    "cta": "spark_burst",
+}
+LAYOUT_MOTION_DELAYS = {
+    "hook": 0.5,
+    "github_hero": 0.52,
+    "cta": 0.46,
+    "code": 0.62,
+    "architecture_map": 0.6,
+    "flow": 0.6,
+}
 
 
 @dataclass
@@ -64,6 +90,8 @@ def prepare_visual_assets(
         manifest["github_screenshot"] = screenshot_result
         if screenshot_result.get("status") in {"ok", "cached"}:
             public_screenshot_path = "generated/assets/github-repo-home.png"
+    if public_screenshot_path is None:
+        _clear_github_screenshot_asset(enhanced, manifest)
 
     readme = extract_readme_evidence(repo_summary)
     manifest["readme"] = {
@@ -80,6 +108,7 @@ def prepare_visual_assets(
         _annotate_readme_focus(enhanced, readme, manifest)
     _enrich_scene_layouts(enhanced, repo_summary, readme, manifest)
     _annotate_cta_repo_identity(enhanced, repo_url, manifest)
+    _assign_motion_assets(enhanced, manifest)
     _compact_visual_language(enhanced)
 
     _write_manifest(output_dir, manifest)
@@ -188,6 +217,14 @@ def _capture_github_repo_screenshot(
             "reason": (result.stderr or result.stdout or "Browser screenshot failed").strip()[:500],
         }
 
+    quality_issue = _github_screenshot_quality_issue(output_path)
+    if quality_issue:
+        output_path.unlink(missing_ok=True)
+        return {
+            "status": "failed",
+            "reason": quality_issue,
+        }
+
     shutil.copyfile(output_path, public_path)
     return {
         "status": "ok",
@@ -200,24 +237,73 @@ def _capture_github_repo_screenshot(
 
 def _use_cached_github_screenshot(result: dict, output_path: Path, public_path: Path) -> dict:
     if public_path.exists():
-        return {
-            "status": "cached",
-            "reason": result.get("reason", "screenshot refresh failed"),
-            "output_path": str(output_path) if output_path.exists() else None,
-            "public_path": str(public_path),
-            "public_src": "generated/assets/github-repo-home.png",
-        }
+        public_issue = _github_screenshot_quality_issue(public_path)
+        if public_issue:
+            result = {
+                **result,
+                "reason": f"{result.get('reason', 'screenshot refresh failed')}; cached public rejected: {public_issue}",
+            }
+        else:
+            return {
+                "status": "cached",
+                "reason": result.get("reason", "screenshot refresh failed"),
+                "output_path": str(output_path) if output_path.exists() else None,
+                "public_path": str(public_path),
+                "public_src": "generated/assets/github-repo-home.png",
+            }
     if output_path.exists():
-        public_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(output_path, public_path)
-        return {
-            "status": "cached",
-            "reason": result.get("reason", "screenshot refresh failed"),
-            "output_path": str(output_path),
-            "public_path": str(public_path),
-            "public_src": "generated/assets/github-repo-home.png",
-        }
+        output_issue = _github_screenshot_quality_issue(output_path)
+        if output_issue:
+            result = {
+                **result,
+                "reason": f"{result.get('reason', 'screenshot refresh failed')}; cached output rejected: {output_issue}",
+            }
+        else:
+            public_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(output_path, public_path)
+            return {
+                "status": "cached",
+                "reason": result.get("reason", "screenshot refresh failed"),
+                "output_path": str(output_path),
+                "public_path": str(public_path),
+                "public_src": "generated/assets/github-repo-home.png",
+            }
     return result
+
+
+def _github_screenshot_quality_issue(path: Path) -> str | None:
+    """Reject tiny Chrome screenshots that are usually timeout or blank error pages."""
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        return f"screenshot stat failed: {exc}"
+    if size < MIN_GITHUB_SCREENSHOT_BYTES:
+        return f"screenshot looks like an error page or blank capture ({size} bytes)"
+    width, height = _png_dimensions(path)
+    if width is not None and height is not None and (width < 800 or height < 600):
+        return f"screenshot dimensions are too small ({width}x{height})"
+    return None
+
+
+def _png_dimensions(path: Path) -> tuple[int | None, int | None]:
+    try:
+        with path.open("rb") as file:
+            header = file.read(24)
+    except OSError:
+        return None, None
+    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n" or header[12:16] != b"IHDR":
+        return None, None
+    return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
+
+
+def _clear_github_screenshot_asset(storyboard: Storyboard, manifest: dict) -> None:
+    for scene in storyboard.scenes:
+        visual = scene.visual
+        if visual.asset_type != "github_repo_home" and visual.asset_path != "generated/assets/github-repo-home.png":
+            continue
+        visual.asset_type = "none"
+        visual.asset_path = None
+        manifest["annotations"].append({"scene_id": scene.id, "asset_type": "github_repo_home_rejected"})
 
 
 def _strengthen_hook_scene(
@@ -295,16 +381,12 @@ def _display_repo_url(repo_url: str | None) -> str | None:
         return None
     parsed = urlparse(repo_url)
     if parsed.netloc.lower() == "github.com":
-        path = parsed.path.strip("/")
-        return f"github.com/{path}" if path else "github.com"
+        return compact_github_repo_handle(repo_url)
     return repo_url.removeprefix("https://").removeprefix("http://").rstrip("/")
 
 
 def _repo_handle(repo_url: str | None) -> str | None:
-    display = _display_repo_url(repo_url)
-    if not display:
-        return None
-    return display.removeprefix("github.com/").rstrip("/")
+    return compact_github_repo_handle(repo_url) or _display_repo_url(repo_url)
 
 
 def _annotate_cta_repo_identity(storyboard: Storyboard, repo_url: str | None, manifest: dict) -> None:
@@ -335,6 +417,27 @@ def _annotate_cta_repo_identity(storyboard: Storyboard, repo_url: str | None, ma
             "repo_display_url": handle,
         }
     )
+
+
+def _assign_motion_assets(storyboard: Storyboard, manifest: dict) -> None:
+    for scene in storyboard.scenes:
+        visual = scene.visual
+        if visual.motion_asset != "none" or visual.layout == "result_media":
+            continue
+        if scene.duration < 4 and visual.layout not in {"hook", "github_hero", "cta"}:
+            continue
+        asset = LAYOUT_MOTION_ASSETS.get(visual.layout)
+        if not asset:
+            continue
+        visual.motion_asset = asset
+        visual.motion_delay_ratio = LAYOUT_MOTION_DELAYS.get(visual.layout, 0.58)
+        manifest["annotations"].append(
+            {
+                "scene_id": scene.id,
+                "motion_asset": asset,
+                "motion_delay_ratio": visual.motion_delay_ratio,
+            }
+        )
 
 
 def _annotate_readme_focus(storyboard: Storyboard, readme: ReadmeEvidence, manifest: dict) -> None:

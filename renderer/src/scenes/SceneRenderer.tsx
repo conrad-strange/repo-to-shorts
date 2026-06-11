@@ -12,9 +12,21 @@ import {ResultMediaScene} from './ResultMediaScene';
 import {StackScene} from './StackScene';
 import {StepsScene} from './StepsScene';
 import {TextScene} from './TextScene';
+import {MotionAccentLayer} from './MotionAccentLayer';
 import type {Scene} from '../types';
 
 export const SceneRenderer: React.FC<{scene: Scene}> = ({scene}) => {
+  const sceneNode = renderScene(scene);
+
+  return (
+    <>
+      {sceneNode}
+      <MotionAccentLayer scene={scene} />
+    </>
+  );
+};
+
+const renderScene = (scene: Scene) => {
   if (scene.visual.layout === 'hook') {
     return <HookScene scene={scene} />;
   }

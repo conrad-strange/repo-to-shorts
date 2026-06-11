@@ -16,6 +16,7 @@ from gva.core.llm_client import llm_settings_error
 from gva.core.captions import attach_caption_cues
 from gva.core.demo_report import generate_demo_assets
 from gva.core.evidence import build_evidence_index, evidence_refs_for_keys, safe_fallback_refs
+from gva.core.motion_library import attach_motion_library_assets
 from gva.core.pacing import (
     duration_range_for_video_mode,
     fit_storyboard_duration_for_video_mode,
@@ -29,6 +30,7 @@ from gva.core.render_bridge import (
 from gva.core.repo_loader import resolve_project_source
 from gva.core.runs import allocate_run
 from gva.core.tts import run_tts_timing
+from gva.core.visible_text import compact_github_repo_handle
 from gva.core.visual_assets import prepare_visual_assets
 from gva.core.visible_manifest import apply_visible_text_policy
 from gva.core.visual_pages import apply_visual_pages
@@ -378,6 +380,12 @@ def run_render_workflow(
             timed_storyboard = attach_caption_cues(timed_storyboard, output_dir)
         timed_storyboard = apply_visual_pages(timed_storyboard, output_dir=output_dir)
         timed_storyboard = apply_visible_text_policy(timed_storyboard, output_dir=output_dir)
+        timed_storyboard = attach_motion_library_assets(
+            timed_storyboard,
+            output_dir=output_dir,
+            renderer_dir=settings.renderer_dir.resolve(),
+            settings=settings,
+        )
         timed_storyboard_path.write_text(timed_storyboard.model_dump_json(indent=2), encoding="utf-8")
         metadata["caption_cues_path"] = str(output_dir / "logs" / "caption-cues.json")
 
@@ -561,7 +569,7 @@ def _apply_bomb_mode_to_storyboard(
         first.visual.repo_url = repo_url
         changed = True
     if first.visual.repo_display_url is None and repo_url:
-        first.visual.repo_display_url = repo_url.replace("https://", "")
+        first.visual.repo_display_url = compact_github_repo_handle(repo_url) or repo_url.replace("https://", "")
         changed = True
     bomb_beats = [
         MicroBeat(text="真实仓库", kind="warning", emphasis="evidence", start_ratio=0.08),

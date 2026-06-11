@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     frontend_dir: Path = Path("frontend")
     outputs_dir: Path = Path("outputs")
     repo_cache_dir: Path = Path(".cache/repos")
+    motion_cache_dir: Path = Path(".cache/motion-library")
     node_exe: Optional[Path] = None
     npm_cmd: Optional[Path] = None
     ffmpeg_exe: Optional[Path] = None
